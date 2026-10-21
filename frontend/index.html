@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172e2c">
+  <title>Mationamento · Controle de estacionamento</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23172e2c'/%3E%3Ctext x='10' y='29' fill='%23cff280' font-size='29' font-family='Arial' font-weight='bold'%3EP%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <section id="login-view" class="login-layout" hidden>
+    <div class="login-story">
+      <a class="brand" href="/" aria-label="Mationamento, início"><span class="brand-mark">m<span>·</span></span><span>mationamento</span></a>
+      <div class="login-message"><span class="eyebrow">MENOS CONTROLE NO PAPEL. MAIS FLUIDEZ.</span><h1>Cada vaga.<br>Cada entrada.<br>Tudo no lugar.</h1><p>Uma operação organizada começa com uma visão simples do seu estacionamento.</p></div>
+      <div class="parking-art" aria-hidden="true"><span>P</span><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="login-footer">Seu estacionamento, em movimento.</p>
+    </div>
+    <div class="login-side"><div class="login-box"><span class="small-label">ACESSO DO OPERADOR</span><h2>Bom ter você por aqui.</h2><p>Entre na sua conta para começar a operação.</p>
+      <form id="login-form"><label>Login<input name="login" autocomplete="username" required maxlength="80" placeholder="Seu login"></label><label>Senha<input name="senha" type="password" autocomplete="current-password" required maxlength="128" placeholder="Sua senha"></label><p id="login-error" class="form-error" role="alert" hidden></p><button class="button primary wide" type="submit">Entrar no estacionamento <span aria-hidden="true">↗</span></button></form>
+      <p class="login-note">Acesso exclusivo para operadores cadastrados.</p>
+    </div><span class="version">MATIONAMENTO / PAINEL DE OPERAÇÃO</span></div>
+  </section>
+
+  <div id="app-view" class="app-layout" hidden>
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#operacao"><span class="brand-mark">m<span>·</span></span><span>mationamento</span></a>
+      <span class="nav-label">ESTACIONAMENTO</span>
+      <nav aria-label="Menu principal" id="navigation"></nav>
+      <div class="sidebar-bottom"><div class="local-note"><span class="status-dot"></span><span>Operação local<small id="sidebar-date"></small></span></div><div class="user-block"><span class="avatar" id="avatar">OP</span><div><strong id="user-name">Operador</strong><small>Operador do estacionamento</small></div><button id="logout" class="icon-button" title="Sair da conta" aria-label="Sair da conta">↪</button></div></div>
+    </aside>
+    <div class="workspace"><header class="topbar"><button id="menu-toggle" class="icon-button mobile-menu" aria-label="Abrir menu" aria-expanded="false">☰</button><div class="breadcrumb">Estacionamento <span>/</span> <strong id="breadcrumb">Visão geral</strong></div><div class="topbar-right"><span class="clock" id="clock"></span><span class="topbar-divider"></span><span class="operator-label">PAINEL DO OPERADOR</span></div></header>
+      <main id="main" tabindex="-1"></main>
+      <footer class="app-footer"><span>Mationamento <span class="muted">/ Controle de estacionamento</span></span><span>Feito para manter tudo em ordem.</span></footer>
+    </div>
+  </div>
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <dialog id="modal"><form id="modal-form"><div class="modal-heading"><div><span class="small-label" id="modal-eyebrow">ESTACIONAMENTO</span><h2 id="modal-title"></h2></div><button type="button" class="icon-button" id="modal-close" aria-label="Fechar janela">×</button></div><div id="modal-body"></div><p class="form-error" id="modal-error" role="alert" hidden></p><div class="modal-actions"><button type="button" class="button secondary" id="modal-cancel">Cancelar</button><button type="submit" class="button primary" id="modal-submit">Salvar</button></div></form></dialog>
+</body>
+</html>
