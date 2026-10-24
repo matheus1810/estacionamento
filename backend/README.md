@@ -84,6 +84,18 @@ continua ativo. Não há cadastro público nem recuperação por e-mail.
 
 ## Teste manual do rotativo
 
+O atendimento diário agora começa pelo campo de placa na visão geral. Digite a
+placa e pressione Enter; Alt + P devolve o foco ao campo. Veículos no pátio abrem
+a saída, mensalistas abrem a consulta de acesso e os demais abrem a entrada com
+o veículo selecionado. A lista de horistas possui filtro por placa e rolagem.
+
+Para uma placa nova, o formulário cadastra cliente e veículo e registra a entrada
+por `POST /permanencias/cadastro-entrada`. Envie `cliente: {nome, telefone}` ou
+`cliente_id` existente, além de placa, modelo, cor e vaga_id. As três gravações
+acontecem em uma transação, com rollback em caso de conflito. Não aceita os dois
+tipos de responsável simultaneamente. O botão Atualizar vagas livres mantém os
+outros campos preenchidos para tentar novamente quando a disponibilidade mudar.
+
 1. Crie o primeiro usuário e entre na tela de login (ou autorize no `/docs`).
 2. Cadastre as tarifas em **Tarifas** (`POST /tarifas`). Ambos os valores devem ser positivos.
 3. Cadastre uma vaga em **Vagas** (`POST /vagas`).
@@ -113,6 +125,9 @@ horário, duração ou operador para determinar a cobrança.
 5. Receba a mensalidade por `POST /cobrancas/{id}/pagar`, com uma forma de pagamento.
    Atraso não desloca os períodos. Qualquer dívida mensal do cliente bloqueia
    o acesso, inclusive dívida em outra vaga ou contrato encerrado.
+   A consulta mostra as mensalidades vencidas e permite recebê-las ali mesmo.
+   Depois de cada recebimento o acesso é reavaliado. Se essa nova consulta falhar,
+   o pagamento continua confirmado e a tela permite conferir o acesso novamente.
 6. Tente registrar entrada horista na vaga reservada: deve retornar 409, mesmo vazia.
 7. Cancele a renovação por `POST /contratacoes/{id}/cancelar`. A reserva termina
    no fim do último período já iniciado, inclusive quando há dívida ou nenhum
@@ -209,11 +224,13 @@ Pydantic Settings 2.16.1, Argon2 CFFI 25.1.0, PyJWT 2.15.1,
 Uvicorn 0.54.0, tzdata 2026.5, cryptography 50.0.2, pytest 9.1.1 e httpx 0.28.1.
 Os arquivos requirements registram essas versões. Playwright 1.64.0 é opcional.
 
-MySQL não estava acessível em localhost:3306 e não havia `.env` configurado.
-Por isso conexão, persistência, constraints e concorrência MySQL não foram
-declaradas validadas. Nenhum banco de desenvolvimento foi alterado.
+Na primeira entrega, o banco ainda não estava configurado. Na atualização de
+atendimento do operador, foram executados **32 testes unitários e de interface**
+e **4 testes de integração** em um banco temporário exclusivo do MariaDB 10.4.32
+do XAMPP, com o SQL original. O banco temporário foi removido após os testes;
+os dados do banco da aplicação foram preservados. Isso não valida um servidor
+MySQL 8 separado nem substitui um teste de concorrência com conexões independentes.
 
-Resultado da suíte executada: **20 testes aprovados e 3 testes MySQL pulados**.
 As telas foram verificadas no Edge em desktop e celular com API simulada.
 O serviço real do FastAPI também foi verificado para entrega do HTML, CSS e JS
 por TestClient. O ambiente emitiu um aviso de depreciação do httpx no TestClient;

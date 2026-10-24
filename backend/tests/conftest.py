@@ -44,7 +44,17 @@ def mysql_client(monkeypatch):
                 operador = Usuario(nome='Teste integração',login=login,senha_hash=hash_senha('senha-integracao'),**criacao(None))
                 session.add(operador)
                 session.commit()
-                app.dependency_overrides[get_session] = lambda: session
+                def sessao_requisicao():
+                    # Preserva o mesmo rollback por requisição da dependência real,
+                    # mantendo apenas a conexão e a transação externa do teste.
+                    try:
+                        yield session
+                    except Exception:
+                        session.rollback()
+                        raise
+                    finally:
+                        session.rollback()
+                app.dependency_overrides[get_session] = sessao_requisicao
                 with TestClient(app) as client:
                     resposta = client.post('/auth/login',json={'login':login,'senha':'senha-integracao'})
                     assert resposta.status_code == 200

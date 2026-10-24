@@ -31,7 +31,7 @@ const nav = [
   ['vagas','Vagas','parking'], ['mensalistas','Mensalistas','calendar'], ['cobrancas','Cobranças','receipt'],
   ['tarifas','Tarifas','sliders'], ['usuarios','Operadores','shield'],
 ];
-const state = {user:null, page:'operacao', offset:0, limit:20, query:'', filter:'', cache:{}, renderId:0};
+const state = {user:null, page:'operacao', offset:0, limit:20, query:'', filter:'', cache:{}, renderId:0, atendimento:null};
 let token = sessionStorage.getItem('mationamento_token');
 let modalHandler = null;
 let modalVersion = 0;
@@ -55,7 +55,11 @@ async function api(path, options = {}) {
     logout();
     throw new Error('Sua sessão terminou. Entre novamente.');
   }
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Confira os dados informados.');
+  if (!response.ok) {
+    const error = new Error(typeof data.detail === 'string' ? data.detail : 'Confira os dados informados.');
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 const post = (path, body) => api(path, {method:'POST', ...(body !== undefined ? {body:JSON.stringify(body)} : {})});
@@ -75,6 +79,7 @@ function logout() {
   sessionStorage.removeItem('mationamento_token');
   state.user = null;
   state.cache = {};
+  state.atendimento = null;
   state.renderId++;
   closeModal();
   $('#app-view').hidden = true;
@@ -116,7 +121,7 @@ function navigate() {
 }
 
 function action(label, type, glyph = '', secondary = false, data = '') {
-  return `<button class="button ${secondary ? 'secondary' : 'primary'}" data-action="${type}" ${data}>${glyph ? icon(glyph) : ''}${label}</button>`;
+  return `<button type="button" class="button ${secondary ? 'secondary' : 'primary'}" data-action="${type}" ${data}>${glyph ? icon(glyph) : ''}${label}</button>`;
 }
 function heading(kicker, title, subtitle, buttons = '') {
   return `<section class="page-heading"><div><span class="small-label">${esc(kicker)}</span><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="heading-actions">${buttons}</div></section>`;
@@ -133,7 +138,7 @@ function pagination(count) {
   return `<div class="pagination"><span>${count ? `${state.offset + 1}–${state.offset + count}` : '0'} registros nesta página</span><button class="button secondary" data-action="previous" ${state.offset === 0 ? 'disabled' : ''}>← Anterior</button><button class="button secondary" data-action="next" ${count < state.limit ? 'disabled' : ''}>Próxima →</button></div>`;
 }
 function rowAction(label, actionName, id, danger = false) {
-  return `<button class="subtle" ${danger ? 'style="color:var(--red)"' : ''} data-action="${actionName}" data-id="${id}">${label}</button>`;
+  return `<button type="button" class="subtle" ${danger ? 'style="color:var(--red)"' : ''} data-action="${actionName}" data-id="${id}">${label}</button>`;
 }
 function toolbar(searchPlaceholder = '', filters = '') {
   return `<div class="toolbar">${searchPlaceholder ? `<form id="search-form" class="search-form"><input name="search" aria-label="${esc(searchPlaceholder)}" placeholder="${esc(searchPlaceholder)}" value="${esc(state.query)}" maxlength="120"><button class="button secondary" type="submit" aria-label="Buscar">${icon('search')}</button></form>` : '<span class="toolbar-label">CADASTROS DO ESTACIONAMENTO</span>'}${filters}</div>`;
@@ -153,6 +158,7 @@ async function render() {
     const html = await ({operacao:operation,clientes:clients,veiculos:vehicles,vagas:spaces,mensalistas:contracts,cobrancas:charges,tarifas:rates,usuarios:operators}[state.page])();
     if (renderId !== state.renderId || !state.user) return;
     $('#main').innerHTML = html;
+    if (state.page === 'operacao' && !$('#modal').open) $('#attendance-plate')?.focus();
   } catch (error) {
     if (renderId !== state.renderId || !state.user) return;
     $('#main').innerHTML = `<div class="error-panel"><h2>Não foi possível carregar os dados.</h2><p>${esc(error.message)}</p>${action('Tentar novamente','refresh','refresh')}</div>`;
@@ -169,10 +175,10 @@ async function operation() {
   const ativas = vagas.filter(v=>v.ativa).length;
   const uso = ativas ? Math.round((abertas.length + reservadas)/ativas*100) : 0;
   const metric = (label,value,note,glyph,highlight=false) => `<article class="metric ${highlight?'highlight':''}"><span class="metric-label">${label}${icon(glyph)}</span><div class="metric-value">${value}</div><span class="metric-note">${note}</span></article>`;
-  const rows = abertas.slice(0,6).map(p => {
+  const rows = abertas.map(p => {
     const v = veiculos.find(v=>v.id===p.veiculo_id);
     const vaga = vagas.find(v=>v.id===p.vaga_id);
-    return `<tr><td><span class="plate">${esc(v?.placa||'—')}</span></td><td>${esc(vaga?.numero||p.vaga_id)}</td><td>${localTime(p.entrada)}<div class="muted" style="font-size:9px;margin-top:4px">${localDate(p.entrada)}</div></td><td>${badge('Em andamento')}</td><td>${rowAction('Registrar saída ↗','exit',p.id)}</td></tr>`;
+    return `<tr data-stay-plate="${esc(v?.placa||'')}"><td><span class="plate">${esc(v?.placa||'—')}</span><div class="muted" style="font-size:9px;margin-top:5px">${esc(v?.modelo||'')}</div></td><td>${esc(vaga?.numero||p.vaga_id)}</td><td>${localTime(p.entrada)}<div class="muted" style="font-size:9px;margin-top:4px">${localDate(p.entrada)}</div></td><td>${badge('Em andamento')}</td><td>${rowAction('Registrar saída ↗','exit',p.id)}</td></tr>`;
   });
   const lots = vagas.slice(0,24).map(v=>{
     const cls = !v.ativa ? 'inactive' : v.disponivel ? '' : v.motivo.includes('reservada') ? 'reserved' : 'busy';
@@ -181,10 +187,11 @@ async function operation() {
   }).join('');
   return heading('SEU ESTACIONAMENTO EM TEMPO REAL','Tudo sob controle.','Acompanhe as vagas e mantenha a operação em movimento.',
     action('Consultar mensalista','access','search',true)+action('Registrar entrada','entry','plus')) +
+    `<section class="attendance-bar" aria-labelledby="attendance-title"><div><span class="small-label">ATENDIMENTO RÁPIDO</span><h2 id="attendance-title">Qual é a placa?</h2><p>Entrada, saída ou mensalista. Comece por aqui.</p></div><form id="attendance-form"><label for="attendance-plate" class="sr-only">Placa para atendimento</label><input id="attendance-plate" name="placa" placeholder="ABC1D23" maxlength="12" required autocomplete="off" spellcheck="false" aria-describedby="plate-hint"><button class="button primary" type="submit">${icon('search')}Atender veículo</button><small id="plate-hint">Digite a placa e pressione Enter <kbd>Alt</kbd> + <kbd>P</kbd></small></form></section>`+
     `<div class="metrics">${metric('Vagas disponíveis',livres,`de ${ativas} vagas ativas`,'parking',true)}${metric('Horistas no pátio',abertas.length,'Permanências em andamento','car')}${metric('Vagas reservadas',reservadas,'Uso exclusivo de mensalistas','calendar')}${metric('Ocupação atual',`${uso}%`,'Horistas + reservas mensais','grid')}</div>
     <div class="dashboard-columns"><div class="dashboard-main"><section class="panel"><div class="panel-header"><div><h3>Mapa de vagas</h3><p>Um olhar rápido para o seu pátio.</p></div>${badge('Agora')}</div><div class="lot-legend"><span><i class="legend-dot"></i>Disponível</span><span><i class="legend-dot busy"></i>Horista</span><span><i class="legend-dot reserved"></i>Mensalista</span><span><i class="legend-dot inactive"></i>Inativa</span></div>${vagas.length ? `<div class="lot-grid">${lots}</div>` : empty('Vamos preparar o pátio?','Cadastre as vagas para visualizar a disponibilidade.')}
     <div class="panel-foot"><span>${vagas.length} vagas cadastradas${vagas.length>24?' · exibindo as primeiras 24':''}</span><a class="subtle" href="#vagas">Gerenciar vagas ↗</a></div></section>
-    <section class="panel"><div class="panel-header"><div><h3>Horistas em andamento</h3><p>Entrada registrada. Saída quando o cliente precisar.</p></div><span class="badge gray">${abertas.length} no pátio</span></div>${table(['Veículo','Vaga','Entrada','Situação',''],rows,'O pátio está tranquilo.','Nenhum horista com permanência aberta.')}${abertas.length>6?`<div class="panel-foot"><span>Mostrando 6 de ${abertas.length}</span>${action('Ver todas','open-stays','car',true)}</div>`:''}</section></div>
+    <section class="panel stays-panel"><div class="panel-header"><div><h3>Horistas em andamento</h3><p>Localize a placa e confirme a saída.</p></div><span class="badge gray">${abertas.length} no pátio</span></div>${abertas.length?'<div class="stay-search"><label class="sr-only" for="stay-filter">Filtrar veículos no pátio</label><input id="stay-filter" type="search" placeholder="Filtrar placa no pátio…" autocomplete="off"><span id="stay-count" class="muted"></span></div>':''}${table(['Veículo','Vaga','Entrada','Situação',''],rows,'O pátio está tranquilo.','Nenhum horista com permanência aberta.')}<p id="stay-no-results" class="empty" hidden>Nenhuma placa corresponde à busca.</p></section></div>
     <div class="dashboard-side"><aside class="callout"><span class="small-label">ACESSO DE MENSALISTAS</span><h3>Uma placa.<br>Uma consulta. Tudo certo.</h3><p>Confira a reserva e as pendências antes de liberar o acesso.</p>${action('Consultar placa','access','search',true)}</aside>
     <section class="panel"><div class="panel-header"><h3>Atalhos da operação</h3></div><div class="quick-actions">${[['entry','car','Registrar entrada','Iniciar uma permanência horista'],['new-client','users','Cadastrar cliente','Cliente e veículo, tudo organizado'],['new-contract','calendar','Nova contratação','Reservar uma vaga mensal']].map(([a,i,t,s])=>`<button class="quick-action" data-action="${a}"><span class="quick-icon">${icon(i)}</span><span><strong>${t}</strong><small>${s}</small></span><span class="arrow">↗</span></button>`).join('')}</div></section>
     <section class="panel"><div class="panel-header"><div><h3>Distribuição do pátio</h3><p>Reservas contam como vagas em uso.</p></div></div><div style="padding:0 24px 23px"><div style="display:flex;justify-content:space-between;font-size:11px"><span class="muted">Ocupação</span><strong>${uso}%</strong></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,uso)}%"></div></div><p style="font-size:10px;margin:12px 0 0;color:var(--muted)">${livres} vagas livres para receber o próximo cliente.</p></div></section></div></div>`;
@@ -279,11 +286,14 @@ function openModal(title, body, handler, button = 'Salvar') {
   $('#modal-cancel').textContent = handler ? 'Cancelar' : 'Fechar';
   modalHandler = handler;
   if (!$('#modal').open) $('#modal').showModal();
+  const first = $('#modal-body input:not([disabled]), #modal-body select:not([disabled]), #modal-body button');
+  if (first) first.focus();
 }
 function closeModal() {
   $('#modal').close(); modalHandler=null; modalVersion++;
+  if(state.page==='operacao') $('#attendance-plate')?.focus();
 }
-async function complete(message) { closeModal(); toast(message); await render(); }
+async function complete(message) { state.atendimento=null; closeModal(); toast(message); await render(); }
 
 async function clientModal(id) {
   const c = id ? state.cache.rows?.find(v=>v.id===id) : null;
@@ -334,32 +344,50 @@ async function contractModal() {
   },'Criar contratação');
 }
 
-async function entryModal(vagaId) {
+async function entryModal(vagaId, veiculoId) {
   const [vagas,veiculos,clientes] = await Promise.all([all('/vagas'),all('/veiculos'),all('/clientes')]);
   const validos = veiculos.filter(v=>clientes.some(c=>c.id===v.cliente_id&&c.ativo));
   const livres = vagas.filter(v=>v.disponivel);
-  if(!validos.length){toast('Cadastre um cliente ativo e seu veículo antes de registrar a entrada.',true);return;}
+  if(!validos.length){return plateModal(vagaId);}
   if(!livres.length){toast('Nenhuma vaga disponível no momento.',true);return;}
-  openModal('Registrar entrada',`<div class="form-stack">${select('veiculo_id','Veículo / cliente',validos.map(v=>[v.id,`${v.placa} · ${v.modelo} · ${clientes.find(c=>c.id===v.cliente_id)?.nome}`]))}${select('vaga_id','Vaga disponível',livres.map(v=>[v.id,`Vaga ${v.numero}`]),vagaId||'')}</div><p class="muted" style="font-size:11px;margin-top:20px">O horário e a tarifa são registrados na confirmação. A disponibilidade será conferida novamente.</p>`,async values=>{
-    await post('/permanencias',{veiculo_id:Number(values.veiculo_id),vaga_id:Number(values.vaga_id)});
-    await complete('Entrada registrada. Boa permanência!');
+  openModal('Registrar entrada',`<div class="form-stack">${select('veiculo_id','Veículo / cliente',validos.map(v=>[v.id,`${v.placa} · ${v.modelo} · ${clientes.find(c=>c.id===v.cliente_id)?.nome}`]),veiculoId||'')}${select('vaga_id','Vaga disponível',livres.map(v=>[v.id,`Vaga ${v.numero}`]),vagaId||livres[0].id)}</div><p class="muted" style="font-size:11px;margin-top:20px">O horário e a tarifa são registrados na confirmação. A disponibilidade será conferida novamente.</p>`,async values=>{
+    const p=await post('/permanencias',{veiculo_id:Number(values.veiculo_id),vaga_id:Number(values.vaga_id)});
+    const v=validos.find(v=>v.id===Number(values.veiculo_id));
+    const vaga=livres.find(v=>v.id===p.vaga_id)||state.cache.vagas?.find(v=>v.id===p.vaga_id);
+    await complete(`Entrada registrada: ${v.placa} · vaga ${vaga?.numero||p.vaga_id}.`);
   },'Confirmar entrada');
+  $('#modal-body').insertAdjacentHTML('beforeend',action('Atualizar vagas livres','refresh-entry-spaces','refresh',true));
 }
 
-async function exitModal(id) {
+function duration(entrada, instante) {
+  // As strings do banco representam o mesmo relógio local. Não usa o fuso do navegador.
+  const asLocal = value => Date.parse(value.endsWith('Z')?value:value+'Z');
+  const minutes = Math.max(0,Math.floor((asLocal(instante)-asLocal(entrada))/60000));
+  return `${Math.floor(minutes/60)}h ${String(minutes%60).padStart(2,'0')}min`;
+}
+
+async function exitModal(id, atendimento = null) {
   const previa = await api(`/permanencias/${id}/previa`);
-  const p = state.cache.abertas?.find(p=>p.id===id);
-  const veiculo = state.cache.veiculos?.find(v=>v.id===p?.veiculo_id);
-  openModal('Registrar saída',`<p>Confira o valor e selecione como o cliente vai pagar.</p><dl class="details"><div><dt>Veículo</dt><dd>${veiculo?esc(veiculo.placa):`Permanência #${id}`}</dd></div><div><dt>Blocos de 30 minutos</dt><dd>${previa.blocos}</dd></div><div><dt>Prévia calculada às</dt><dd>${localTime(previa.calculado_em)}</dd></div></dl><div class="total"><span>Valor previsto</span><strong>${money(previa.valor)}</strong></div>${paymentSelect()}<p style="font-size:10px;margin-top:16px">O valor será recalculado ao confirmar. A confirmação encerra a permanência e registra o pagamento integral.</p>`,async values=>{
+  const p = atendimento?.permanencia || state.cache.abertas?.find(p=>p.id===id);
+  const veiculo = atendimento?.veiculo || state.cache.veiculos?.find(v=>v.id===p?.veiculo_id);
+  const vaga = state.cache.vagas?.find(v=>v.id===p?.vaga_id);
+  openModal('Registrar saída',`<p>Confira o valor e selecione como o cliente vai pagar.</p><dl class="details"><div><dt>Veículo</dt><dd>${veiculo?esc(veiculo.placa):`Permanência #${id}`}</dd></div>${p?`<div><dt>Vaga</dt><dd>${esc(vaga?.numero||p.vaga_id)}</dd></div><div><dt>Entrada</dt><dd>${timestamp(p.entrada)}</dd></div><div><dt>Tempo decorrido</dt><dd>${duration(p.entrada,previa.calculado_em)}</dd></div>`:''}<div><dt>Blocos de 30 minutos</dt><dd>${previa.blocos}</dd></div><div><dt>Prévia calculada às</dt><dd>${localTime(previa.calculado_em)}</dd></div></dl><div class="total"><span>Valor previsto</span><strong>${money(previa.valor)}</strong></div>${paymentSelect()}<p style="font-size:10px;margin-top:16px">O valor será recalculado ao confirmar. A confirmação encerra a permanência e registra o pagamento integral.</p>`,async values=>{
     const cobranca=await post(`/permanencias/${id}/saida`,values);
-    await complete(`Saída registrada. Pagamento de ${money(cobranca.valor)} confirmado.`);
+    await complete(`Saída registrada${veiculo?': '+veiculo.placa:''}. Pagamento de ${money(cobranca.valor)} confirmado.`);
   },'Confirmar saída e pagamento');
 }
 
-function payModal(id) {
-  const c=state.cache.rows.find(c=>c.id===id);
+function payModal(id, placa = null) {
+  const c=(placa?state.atendimento?.pendencias:state.cache.rows)?.find(c=>c.id===id);
+  if(!c) throw new Error('Atualize a consulta antes de receber esta cobrança.');
   openModal('Receber mensalidade',`<dl class="details"><div><dt>Vencimento</dt><dd>${localDate(c.vencimento)}</dd></div><div><dt>Competência</dt><dd>${c.competencia.slice(0,7).split('-').reverse().join('/')}</dd></div></dl><div class="total"><span>Pagamento integral</span><strong>${money(c.valor)}</strong></div>${paymentSelect()}`,async values=>{
     await post(`/cobrancas/${id}/pagar`,values);
+    if(placa){
+      toast('Mensalidade recebida. Conferindo o acesso…');
+      openModal('Pagamento confirmado',`<p>O pagamento foi registrado. Confira novamente o acesso do mensalista.</p>${action('Conferir acesso','retry-access','refresh',true)}`,null);
+      await monthlyAccess(placa);
+      return;
+    }
     await complete('Mensalidade recebida.');
   },'Confirmar pagamento');
 }
@@ -373,9 +401,85 @@ function cancelContract(id) {
 
 function accessModal() {
   openModal('Consultar mensalista',`<p>Consulte a placa antes de liberar o acesso. Esta consulta atualiza as mensalidades e não registra entrada ou saída.</p>${input('placa','Placa do veículo','text','',{required:true,maxlength:12,placeholder:'ABC1D23',autocomplete:'off'})}`,async values=>{
-    const result=await post('/cobrancas/consultar-acesso',values);
-    openModal('Resultado da consulta',`<div class="access-result ${result.liberado?'':'blocked'}">${icon(result.liberado?'check':'lock')}<h3>${result.liberado?'Acesso liberado':'Acesso bloqueado'}</h3><p>${esc(result.motivo)}</p>${result.vagas.length?`<p style="margin-top:16px;font-size:11px">${result.vagas.length} ${result.vagas.length===1?'vaga contratada':'vagas contratadas'}</p>`:''}</div>`,null);
+    await monthlyAccess(values.placa);
   },'Consultar acesso');
+}
+
+function plateModal(vagaId, placa = '') {
+  openModal('Atender veículo',`<p>Informe a placa para encontrar a próxima ação.</p>${input('placa','Placa do veículo','text',placa,{required:true,maxlength:12,placeholder:'ABC1D23',autocomplete:'off',spellcheck:'false'})}`,values=>consultPlate(values.placa,vagaId),'Consultar placa');
+}
+
+async function consultPlate(value, vagaId) {
+  const placa=value.replace(/[\s-]/g,'').toUpperCase();
+  if(!/^[A-Z]{3}(?:\d{4}|\d[A-Z]\d{2})$/.test(placa)) throw new Error('Informe uma placa brasileira válida. Exemplo: ABC1D23.');
+  openModal('Consultando placa',`<div class="loading" role="status"><span class="spinner"></span>Localizando ${esc(placa)}…</div>`,null);
+  const version=modalVersion;
+  try {
+    let veiculo;
+    try {veiculo=await api('/veiculos/placa/'+encodeURIComponent(placa));}
+    catch(error){
+      if(version!==modalVersion)return;
+      if(error.status===404){await quickRegistrationModal(placa,vagaId);return;}
+      throw error;
+    }
+    const [cliente,abertas,contratos]=await Promise.all([
+      api('/clientes/'+veiculo.cliente_id),
+      all('/permanencias?abertas=true&veiculo_id='+veiculo.id),
+      all('/contratacoes?vigentes=true&cliente_id='+veiculo.cliente_id),
+    ]);
+    if(version!==modalVersion||!state.user)return;
+    const permanencia=abertas.find(p=>p.veiculo_id===veiculo.id);
+    state.atendimento={placa,cliente,veiculo,permanencia};
+    if(permanencia){await exitModal(permanencia.id,state.atendimento);return;}
+    if(!cliente.ativo){openModal('Cliente inativo',`<p>${esc(cliente.nome)} está inativo. Reative o cadastro em Clientes para registrar uma nova entrada.</p>`,null);return;}
+    if(contratos.length){await monthlyAccess(placa);return;}
+    await entryModal(vagaId,veiculo.id);
+  } catch(error) {
+    if(version!==modalVersion||!state.user)return;
+    plateModal(vagaId,placa);
+    $('#modal-error').textContent=error.message;
+    $('#modal-error').hidden=false;
+  }
+}
+
+async function quickRegistrationModal(placa, vagaId) {
+  const [clientes,vagas]=await Promise.all([all('/clientes'),all('/vagas')]);
+  const livres=vagas.filter(v=>v.disponivel);
+  if(!livres.length){openModal('Sem vaga disponível',`<p>A placa ${esc(placa)} ainda não está cadastrada. Não há vaga livre para concluir a entrada agora.</p>`,null);return;}
+  openModal('Cadastrar e registrar entrada',`<div class="notice">Placa não cadastrada. Preencha os dados uma vez e confirme a entrada aqui mesmo.</div><div class="form-grid">${input('placa','Placa','text',placa,{required:true,maxlength:12})}${select('vaga_id','Vaga disponível',livres.map(v=>[v.id,'Vaga '+v.numero]),vagaId||livres[0].id)}${input('modelo','Modelo','text','',{required:true,maxlength:80})}${input('cor','Cor','text','',{required:true,maxlength:30})}<div class="full"><label>Responsável<select name="responsavel" id="quick-client" aria-label="Responsável"><option value="novo">Cadastrar novo cliente</option>${clientes.filter(c=>c.ativo).map(c=>`<option value="${c.id}">${esc(c.nome)} · ${esc(c.telefone)}</option>`).join('')}</select></label></div><div id="quick-client-fields" class="form-grid full">${input('nome','Nome do cliente','text','',{required:true,maxlength:120})}${input('telefone','Telefone','tel','',{required:true,maxlength:20})}</div></div><p class="muted" style="font-size:10px;margin-top:18px">Cliente, veículo e entrada são salvos juntos. Se houver conflito, os dados continuam nesta tela para correção.</p>`,async values=>{
+    const body={placa:values.placa,modelo:values.modelo,cor:values.cor,vaga_id:Number(values.vaga_id),
+      ...(values.responsavel==='novo'?{cliente:{nome:values.nome.trim(),telefone:values.telefone.trim()}}:{cliente_id:Number(values.responsavel)})};
+    const p=await post('/permanencias/cadastro-entrada',body);
+    const vaga=livres.find(v=>v.id===p.vaga_id)||state.cache.vagas?.find(v=>v.id===p.vaga_id);
+    await complete(`Entrada registrada: ${values.placa.replace(/[\s-]/g,'').toUpperCase()} · vaga ${vaga?.numero||p.vaga_id}. Cadastro concluído.`);
+  },'Cadastrar e confirmar entrada');
+  // A placa já foi digitada no atendimento; começa pelo modelo.
+  $('#modal-body input[name="modelo"]').focus();
+  $('#modal-body').insertAdjacentHTML('beforeend',action('Atualizar vagas livres','refresh-entry-spaces','refresh',true));
+}
+
+async function refreshEntrySpaces() {
+  const version=modalVersion;
+  const vagas=await all('/vagas');
+  const livres=vagas.filter(v=>v.disponivel);
+  if(version!==modalVersion)return;
+  state.cache.vagas=vagas;
+  const field=$('#modal-body select[name="vaga_id"]');
+  if(!field)return;
+  const previous=field.value;
+  field.innerHTML='<option value="">Selecione…</option>'+livres.map(v=>`<option value="${v.id}">Vaga ${esc(v.numero)}</option>`).join('');
+  if(livres.some(v=>String(v.id)===previous))field.value=previous;
+  $('#modal-error').hidden=true;
+  toast(livres.length?'Vagas atualizadas. Confira a seleção antes de confirmar.':'Nenhuma vaga livre. Seus dados continuam preenchidos.',!livres.length);
+  field.focus();
+}
+
+async function monthlyAccess(placa) {
+  const result=await post('/cobrancas/consultar-acesso',{placa});
+  const pendencias=result.cliente_id?await all('/cobrancas?vencidas=true&cliente_id='+result.cliente_id):[];
+  state.atendimento={...state.atendimento,placa,pendencias};
+  const rows=pendencias.map(c=>`<tr><td>${localDate(c.vencimento)}</td><td><strong>${money(c.valor)}</strong></td><td>${rowAction('Receber','access-payment',c.id)}</td></tr>`);
+  openModal('Resultado da consulta',`<p class="access-plate"><span class="plate">${esc(placa.replace(/[\s-]/g,'').toUpperCase())}</span></p><div class="access-result ${result.liberado?'':'blocked'}">${icon(result.liberado?'check':'lock')}<h3>${result.liberado?'Acesso liberado':'Acesso bloqueado'}</h3><p>${esc(result.motivo)}</p>${result.vagas.length?`<p style="margin-top:16px;font-size:11px">${result.vagas.length} ${result.vagas.length===1?'vaga contratada':'vagas contratadas'}</p>`:''}</div>${rows.length?`<h3 class="debt-title">Mensalidades vencidas</h3><p>Pague uma cobrança por vez. O acesso será conferido novamente após cada recebimento.</p>${table(['Vencimento','Valor',''],rows)}`:''}`,null);
 }
 
 async function spaceDetail(id) {
@@ -392,7 +496,10 @@ const actions = {
   'new-space':()=>spaceModal(), 'edit-space':id=>spaceModal(id),
   'new-user':()=>userModal(), 'edit-user':id=>userModal(id),
   'new-contract':()=>contractModal(), 'cancel-contract':id=>cancelContract(id),
-  'entry':()=>entryModal(), 'exit':id=>exitModal(id), 'pay-charge':id=>payModal(id),
+  'entry':()=>plateModal(), 'exit':id=>exitModal(id), 'pay-charge':id=>payModal(id),
+  'access-payment':id=>payModal(id,state.atendimento?.placa),
+  'retry-access':()=>monthlyAccess(state.atendimento.placa),
+  'refresh-entry-spaces':()=>refreshEntrySpaces(),
   'access':()=>accessModal(), 'space-detail':id=>spaceDetail(id),
   'previous':()=>{state.offset=Math.max(0,state.offset-state.limit);return render();},
   'next':()=>{state.offset+=state.limit;return render();},
@@ -412,6 +519,12 @@ document.addEventListener('click',async event=>{
   finally{button.disabled=false;}
 });
 document.addEventListener('submit',async event=>{
+  if(event.target.id==='attendance-form'){
+    event.preventDefault();const button=$('button',event.target);button.disabled=true;
+    try{await consultPlate(new FormData(event.target).get('placa'));}
+    catch(error){toast(error.message,true);$('#attendance-plate')?.focus();}
+    finally{button.disabled=false;}
+  }
   if(event.target.id==='search-form'){
     event.preventDefault();state.query=new FormData(event.target).get('search').trim();state.offset=0;render();
   }
@@ -423,6 +536,27 @@ document.addEventListener('submit',async event=>{
 });
 document.addEventListener('change',event=>{
   if(event.target.id==='list-filter'){state.filter=event.target.value;state.offset=0;render();}
+  if(event.target.id==='quick-client'){
+    const novo=event.target.value==='novo';
+    $('#quick-client-fields').hidden=!novo;
+    $('#quick-client-fields').querySelectorAll('input').forEach(input=>{input.disabled=!novo;input.required=novo;});
+  }
+});
+document.addEventListener('input',event=>{
+  if(event.target.id!=='stay-filter')return;
+  const query=event.target.value.replace(/[\s-]/g,'').toUpperCase();
+  let visible=0;
+  document.querySelectorAll('[data-stay-plate]').forEach(row=>{
+    row.hidden=!row.dataset.stayPlate.includes(query);if(!row.hidden)visible++;
+  });
+  $('#stay-count').textContent=`${visible} ${visible===1?'veículo':'veículos'}`;
+  $('#stay-no-results').hidden=visible!==0;
+});
+document.addEventListener('keydown',event=>{
+  if(event.altKey&&!event.ctrlKey&&!event.metaKey&&event.key.toLowerCase()==='p'&&state.user&&!$('#modal').open){
+    event.preventDefault();
+    if(state.page==='operacao')$('#attendance-plate')?.focus();else plateModal();
+  }
 });
 $('#modal-form').addEventListener('submit',async event=>{
   event.preventDefault();if(!modalHandler)return;

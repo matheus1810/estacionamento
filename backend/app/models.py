@@ -3,18 +3,19 @@
 Não há criação automática de tabelas, relacionamentos com carregamento implícito
 ou exclusões em cascata. Campos e tipos seguem as oito tabelas existentes.
 """
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
+from pydantic import NaiveDatetime
 from sqlalchemy import Column, Enum, Numeric, UniqueConstraint
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlmodel import Field, SQLModel
 
 
 class Auditoria(SQLModel):
-    criado_em: datetime
+    criado_em: NaiveDatetime
     criado_por: int = Field(foreign_key='usuarios.id')
-    atualizado_em: datetime | None = None
+    atualizado_em: NaiveDatetime | None = None
     atualizado_por: int | None = Field(default=None, foreign_key='usuarios.id')
 
 
@@ -75,8 +76,8 @@ class Permanencia(Auditoria, table=True):
     cliente_id: int = Field(foreign_key='clientes.id')
     veiculo_id: int = Field(foreign_key='veiculos.id')
     vaga_id: int = Field(foreign_key='vagas.id')
-    entrada: datetime
-    saida: datetime | None = None
+    entrada: NaiveDatetime
+    saida: NaiveDatetime | None = None
     valor_hora_aplicado: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     usuario_entrada_id: int = Field(foreign_key='usuarios.id')
     usuario_saida_id: int | None = Field(default=None, foreign_key='usuarios.id')
@@ -92,7 +93,7 @@ class Cobranca(Auditoria, table=True):
     competencia: date | None = None
     vencimento: date
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    pago_em: datetime | None = None
+    pago_em: NaiveDatetime | None = None
     forma_pagamento: str | None = Field(default=None, sa_column=Column(
         Enum('pix', 'dinheiro', 'cartao'), nullable=True))
     usuario_recebimento_id: int | None = Field(default=None, foreign_key='usuarios.id')

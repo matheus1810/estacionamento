@@ -52,7 +52,7 @@ def browser_page():
             if path=='/auth/login': data={'access_token':'token-apenas-do-teste','token_type':'bearer'}
             elif path=='/auth/me': data=usuario
             elif path=='/cobrancas/atualizar-mensalidades':data={'geradas':0}
-            elif path=='/cobrancas/consultar-acesso':data={'liberado':False,'motivo':'Cliente possui mensalidade vencida e não paga.','vagas':[]}
+            elif path=='/cobrancas/consultar-acesso':data={'liberado':False,'motivo':'Cliente possui mensalidade vencida e não paga.','vagas':[],'cliente_id':1}
             elif path.endswith('/previa'):data={'permanencia_id':1,'calculado_em':'2026-10-20T10:20:00','blocos':3,'valor':'15.00'}
             elif path.endswith('/saida'):data={**cobranca,'valor':'15.00','pago_em':'2026-10-20T10:20:00'}
             elif path.endswith('/pagar'):data={**cobranca,'pago_em':'2026-10-20T10:20:00'}
@@ -61,6 +61,7 @@ def browser_page():
             elif request.method=='POST':data={'id':3,**(body or {})};status=201
             elif request.method=='PATCH':data={'id':1,**(body or {})}
             elif path=='/clientes':data=[cliente]
+            elif path=='/clientes/1':data=cliente
             elif path=='/veiculos':data=[veiculo]
             elif path.startswith('/veiculos/placa/'):data=veiculo
             elif path=='/vagas':data=vagas
@@ -92,19 +93,24 @@ def test_telas_formularios_e_mobile(browser_page):
     entrar(page)
     page.get_by_role('heading',name='Mapa de vagas').wait_for()
     page.screenshot(path=str(ARTIFACTS/'operacao-desktop.png'),full_page=True)
+    # Veículo existente que está fora do pátio e não tem contrato mensal.
+    page.route('**/permanencias?*veiculo_id=*',lambda route:route.fulfill(json=[]))
+    page.route('**/contratacoes?*vigentes=true*',lambda route:route.fulfill(json=[]))
     page.get_by_role('button',name='Registrar entrada',exact=True).first.click()
     dialog=page.get_by_role('dialog')
+    dialog.get_by_label('Placa do veículo').fill('abc-1d23')
+    dialog.get_by_role('button',name='Consultar placa',exact=True).click()
     dialog.get_by_label('Veículo / cliente').select_option('1')
     dialog.get_by_label('Vaga disponível').select_option('1')
     dialog.get_by_role('button',name='Confirmar entrada',exact=True).click()
-    page.get_by_text('Entrada registrada. Boa permanência!',exact=True).wait_for()
+    page.get_by_text('Entrada registrada: ABC1D23 · vaga A-01.',exact=True).wait_for()
     assert ('POST','/permanencias',{'veiculo_id':1,'vaga_id':1}) in calls
 
     page.get_by_role('button',name='Registrar saída ↗').click()
     dialog.get_by_text('R$\xa015,00',exact=True).wait_for()
     dialog.get_by_label('Forma de pagamento').select_option('pix')
     dialog.get_by_role('button',name='Confirmar saída e pagamento').click()
-    page.get_by_text('Saída registrada. Pagamento de R$\xa015,00 confirmado.',exact=True).wait_for()
+    page.get_by_text('Saída registrada: ABC1D23. Pagamento de R$\xa015,00 confirmado.',exact=True).wait_for()
     assert ('POST','/permanencias/1/saida',{'forma_pagamento':'pix'}) in calls
 
     page.get_by_role('link',name='Clientes',exact=True).click()
@@ -167,3 +173,93 @@ def test_pagamentos_cancelamento_edicao_e_tarifas(browser_page):
     page.get_by_role('button',name='Salvar tarifas',exact=True).click()
     page.get_by_text('Tarifas salvas.',exact=True).wait_for()
     assert ('PUT','/tarifas',{'valor_hora':'12.50','valor_mensal_vaga':'300.00'}) in calls
+
+
+def test_placa_localiza_saida_filtro_e_foco(browser_page):
+    page,calls,_=browser_page
+    entrar(page)
+    placa=page.get_by_label('Placa para atendimento',exact=True)
+    placa.fill('abc-1d23')
+    placa.press('Enter')
+    dialog=page.get_by_role('dialog')
+    dialog.get_by_role('heading',name='Registrar saída',exact=True).wait_for()
+    dialog.get_by_text('1h 20min',exact=True).wait_for()
+    assert dialog.get_by_text('Entrada',exact=True).is_visible()
+    assert dialog.get_by_text('Tempo decorrido',exact=True).is_visible()
+    assert not any(method=='POST' and path=='/permanencias' for method,path,_ in calls)
+    dialog.get_by_role('button',name='Cancelar',exact=True).click()
+    assert placa.evaluate('(el)=>document.activeElement===el')
+    page.get_by_label('Filtrar veículos no pátio').fill('ZZZ')
+    page.get_by_text('Nenhuma placa corresponde à busca.',exact=True).wait_for()
+    page.get_by_label('Filtrar veículos no pátio').fill('abc-1')
+    page.get_by_role('button',name='Registrar saída ↗').wait_for()
+    page.keyboard.press('Alt+p')
+    assert placa.evaluate('(el)=>document.activeElement===el')
+
+
+def test_cadastro_rapido_preserva_dados_no_conflito_e_tenta_novamente(browser_page):
+    page,calls,_=browser_page
+    page.route('**/veiculos/placa/NEW1A23',lambda route:route.fulfill(status=404,json={'detail':'Veículo não encontrado.'}))
+    tentativas=[]
+    def cadastrar(route):
+        tentativas.append(route.request.post_data_json)
+        if len(tentativas)==1:route.fulfill(status=409,json={'detail':'Vaga ocupada por horista.'})
+        else:route.fulfill(status=201,json={'id':3,'vaga_id':1})
+    page.route('**/permanencias/cadastro-entrada',cadastrar)
+    entrar(page)
+    page.get_by_label('Placa para atendimento',exact=True).fill('NEW1A23')
+    page.get_by_label('Placa para atendimento',exact=True).press('Enter')
+    dialog=page.get_by_role('dialog')
+    dialog.get_by_role('heading',name='Cadastrar e registrar entrada').wait_for()
+    assert dialog.get_by_label('Placa',exact=True).input_value()=='NEW1A23'
+    dialog.get_by_label('Modelo',exact=True).fill('Fiat Argo')
+    dialog.get_by_label('Cor',exact=True).fill('Branco')
+    dialog.get_by_label('Nome do cliente',exact=True).fill('Cliente Novo')
+    dialog.get_by_label('Telefone',exact=True).fill('11912345678')
+    dialog.get_by_role('button',name='Cadastrar e confirmar entrada').click()
+    dialog.get_by_text('Vaga ocupada por horista.',exact=True).wait_for()
+    assert dialog.get_by_label('Nome do cliente',exact=True).input_value()=='Cliente Novo'
+    dialog.get_by_role('button',name='Atualizar vagas livres').click()
+    page.get_by_text('Vagas atualizadas. Confira a seleção antes de confirmar.',exact=True).wait_for()
+    assert dialog.get_by_label('Modelo',exact=True).input_value()=='Fiat Argo'
+    dialog.get_by_role('button',name='Cadastrar e confirmar entrada').click()
+    page.get_by_text('Entrada registrada: NEW1A23 · vaga A-01. Cadastro concluído.',exact=True).wait_for()
+    assert tentativas==[{'placa':'NEW1A23','modelo':'Fiat Argo','cor':'Branco','vaga_id':1,
+                         'cliente':{'nome':'Cliente Novo','telefone':'11912345678'}}]*2
+    assert not any(path in ('/clientes','/veiculos') and method=='POST' for method,path,_ in calls)
+
+
+def test_mensalista_recebe_pendencia_sem_sair_do_atendimento(browser_page):
+    page,calls,_=browser_page
+    page.route('**/permanencias?*veiculo_id=*',lambda route:route.fulfill(json=[]))
+    pago=[]
+    falhas=[]
+    def acesso(route):
+        if pago and not falhas:
+            falhas.append(True)
+            route.fulfill(status=503,json={'detail':'Não foi possível conferir o acesso agora.'})
+            return
+        route.fulfill(json={'liberado':bool(pago),'motivo':'Acesso liberado.' if pago else 'Cliente possui mensalidade vencida e não paga.',
+                            'vagas':[1] if pago else [],'cliente_id':1})
+    def pagar(route):
+        pago.append(route.request.post_data_json)
+        route.fulfill(json={'id':1,'pago_em':'2026-10-23T09:00:00'})
+    def pendencias(route):
+        route.fulfill(json=[] if pago else [{'id':1,'competencia':'2026-10-01','vencimento':'2026-10-16','valor':'300.00'}])
+    page.route('**/cobrancas/consultar-acesso',acesso)
+    page.route('**/cobrancas?vencidas=true*',pendencias)
+    page.route('**/cobrancas/1/pagar',pagar)
+    entrar(page)
+    page.get_by_label('Placa para atendimento',exact=True).fill('ABC1D23')
+    page.get_by_label('Placa para atendimento',exact=True).press('Enter')
+    dialog=page.get_by_role('dialog')
+    dialog.get_by_role('heading',name='Acesso bloqueado').wait_for()
+    dialog.get_by_role('button',name='Receber',exact=True).click()
+    dialog.get_by_label('Forma de pagamento').select_option('pix')
+    dialog.get_by_role('button',name='Confirmar pagamento').click()
+    dialog.get_by_role('heading',name='Pagamento confirmado',exact=True).wait_for()
+    page.get_by_text('Não foi possível conferir o acesso agora.',exact=True).wait_for()
+    dialog.get_by_role('button',name='Conferir acesso',exact=True).click()
+    dialog.get_by_role('heading',name='Acesso liberado').wait_for()
+    assert pago==[{'forma_pagamento':'pix'}]
+    assert page.locator('a[data-page="operacao"]').get_attribute('aria-current')=='page'

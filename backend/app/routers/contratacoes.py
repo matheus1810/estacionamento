@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from sqlmodel import select
+from sqlmodel import or_, select
 
 from ..auth import UsuarioDep
 from ..config import agora_local
@@ -37,10 +37,15 @@ def criar(dados: ContratacaoCriar, session: SessionDep, usuario: UsuarioDep):
 
 @router.get('', response_model=list[ContratacaoSaida])
 def listar(session: SessionDep, usuario: UsuarioDep, cliente_id: int | None = None,
+           vigentes: bool = False,
            offset: int = Query(0, ge=0), limite: int = Query(50, ge=1, le=100)):
     stmt = select(Contratacao)
     if cliente_id is not None:
         stmt = stmt.where(Contratacao.cliente_id == cliente_id)
+    if vigentes:
+        hoje = agora_local().date()
+        stmt = stmt.where(Contratacao.data_inicio <= hoje,
+                          or_(Contratacao.data_fim.is_(None), Contratacao.data_fim >= hoje))
     return [ContratacaoSaida.model_validate(c) for c in session.exec(
         stmt.order_by(Contratacao.id).offset(offset).limit(limite)).all()]
 

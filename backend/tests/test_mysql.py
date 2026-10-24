@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import select
 
 from app.config import agora_local
-from app.models import Cobranca
+from app.models import Cliente, Cobranca, Veiculo
 
 pytestmark = pytest.mark.mysql
 
@@ -68,6 +68,11 @@ def test_reserva_mensalidade_unica_acesso_pagamento_e_cancelamento(mysql_client)
     cobrancas[0].vencimento = hoje - timedelta(days=1)
     session.commit()
     assert client.post('/cobrancas/consultar-acesso',json={'placa':veiculo['placa']}).json()['liberado'] is False
+    vencidas=client.get('/cobrancas',params={'cliente_id':cliente['id'],'vencidas':True}).json()
+    assert [c['id'] for c in vencidas]==[cobrancas[0].id]
+    assert client.get('/cobrancas',params={'cliente_id':cliente['id']+10000,'vencidas':True}).json()==[]
+    vigentes=client.get('/contratacoes',params={'cliente_id':cliente['id'],'vigentes':True}).json()
+    assert [c['id'] for c in vigentes]==[contrato['id']]
     cobrancas[0].vencimento = hoje
     session.commit()
     pagamento = f'/cobrancas/{cobrancas[0].id}/pagar'
@@ -86,3 +91,36 @@ def test_cancelar_com_divida_preserva_cobrancas(mysql_client):
     assert client.post(f"/contratacoes/{contrato['id']}/cancelar").status_code == 200
     cobrancas = session.exec(select(Cobranca).where(Cobranca.contratacao_mensal_id==contrato['id'])).all()
     assert len(cobrancas) == 1 and cobrancas[0].pago_em is None
+
+
+def test_cadastro_e_entrada_atomicos_sem_cadastros_orfaos(mysql_client):
+    client,session=mysql_client
+    cliente,veiculo,vaga=cadastros(client)
+    criar(client,'/permanencias',{'veiculo_id':veiculo['id'],'vaga_id':vaga['id']})
+    antes_clientes=len(session.exec(select(Cliente)).all())
+    antes_veiculos=len(session.exec(select(Veiculo)).all())
+    body={'vaga_id':vaga['id'],'placa':'NEW1A23','modelo':'Argo','cor':'Branco',
+          'cliente':{'nome':'Cadastro rápido','telefone':'11912345678'}}
+    conflito=client.post('/permanencias/cadastro-entrada',json=body)
+    assert conflito.status_code==409
+    # O rollback da requisição deve remover os INSERTs parciais sem ajuda do teste.
+    assert len(session.exec(select(Cliente)).all())==antes_clientes
+    assert len(session.exec(select(Veiculo)).all())==antes_veiculos
+    nova_vaga=criar(client,'/vagas',{'numero':'RAPIDA'})
+    body['vaga_id']=nova_vaga['id']
+    permanencia=criar(client,'/permanencias/cadastro-entrada',body)
+    novo_veiculo=session.get(Veiculo,permanencia['veiculo_id'])
+    assert novo_veiculo.placa=='NEW1A23'
+    assert novo_veiculo.cliente_id==permanencia['cliente_id']
+    assert len(session.exec(select(Cliente)).all())==antes_clientes+1
+    assert len(session.exec(select(Veiculo)).all())==antes_veiculos+1
+    repetida=client.post('/permanencias/cadastro-entrada',json=body)
+    assert repetida.status_code==409
+    assert len(session.exec(select(Cliente)).all())==antes_clientes+1
+    existente=criar(client,'/vagas',{'numero':'EXISTENTE'})
+    outro=criar(client,'/permanencias/cadastro-entrada',{
+        'vaga_id':existente['id'],'placa':'NEW1A24','modelo':'Gol','cor':'Prata','cliente_id':cliente['id']})
+    assert outro['cliente_id']==cliente['id']
+    assert len(session.exec(select(Cliente)).all())==antes_clientes+1
+    filtradas=client.get('/permanencias',params={'abertas':True,'veiculo_id':permanencia['veiculo_id']}).json()
+    assert len(filtradas)==1 and filtradas[0]['id']==permanencia['id']

@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.regras_estacionamento import atrasada, calcular_horista, fim_cancelamento, periodo, vencimento
-from app.schemas import ClienteCriar, UsuarioCriar, VeiculoCriar
+from app.schemas import ClienteCriar, PermanenciaCadastroCriar, UsuarioCriar, VeiculoCriar
 
 
 @pytest.mark.parametrize('segundos,blocos', [(0, 1), (1800, 1), (1801, 2), (4800, 3), (5400, 3)])
@@ -70,3 +70,12 @@ def test_url_aceita_senha_com_caracteres_especiais():
     settings = Settings(_env_file=None, db_name='exemplo', db_user='operador',
                         db_password='a@b:/?#', jwt_secret='x' * 32)
     assert settings.database_url.password == 'a@b:/?#'
+
+
+def test_cadastro_entrada_exige_um_unico_responsavel():
+    dados={'vaga_id':1,'placa':'new-1a23','modelo':'Argo','cor':'Branco'}
+    with pytest.raises(ValidationError):
+        PermanenciaCadastroCriar(**dados)
+    with pytest.raises(ValidationError):
+        PermanenciaCadastroCriar(**dados,cliente_id=1,cliente={'nome':'Ana','telefone':'123'})
+    assert PermanenciaCadastroCriar(**dados,cliente_id=1).placa=='NEW1A23'

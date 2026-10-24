@@ -184,6 +184,23 @@ class PermanenciaCriar(Entrada):
     vaga_id: Id
 
 
+class PermanenciaCadastroCriar(Entrada):
+    vaga_id: Id
+    placa: str
+    modelo: Modelo
+    cor: Cor
+    cliente_id: Id | None = None
+    cliente: ClienteCriar | None = None
+
+    _placa = field_validator('placa')(normalizar_placa)
+
+    @model_validator(mode='after')
+    def responsavel_unico(self):
+        if (self.cliente_id is None) == (self.cliente is None):
+            raise ValueError('Informe um cliente existente ou os dados de um novo cliente.')
+        return self
+
+
 class PermanenciaSaida(AuditoriaSaida):
     cliente_id: int
     veiculo_id: int
@@ -225,6 +242,7 @@ class AcessoEntrada(Entrada):
 class AcessoSaida(Saida):
     liberado: bool
     motivo: str
+    cliente_id: int | None = None
     vagas: list[int] = Field(default_factory=list)
 
 

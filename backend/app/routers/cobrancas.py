@@ -22,9 +22,15 @@ def atualizar(session: SessionDep, usuario: UsuarioDep):
 
 @router.get('', response_model=list[CobrancaSaida])
 def listar(session: SessionDep, usuario: UsuarioDep, pendentes: bool | None = None,
+           cliente_id: int | None = Query(None, gt=0), vencidas: bool = False,
            contratacao_id: int | None = None, offset: int = Query(0, ge=0),
            limite: int = Query(50, ge=1, le=100)):
     stmt = select(Cobranca)
+    if cliente_id is not None:
+        stmt = stmt.join(Contratacao, Contratacao.id == Cobranca.contratacao_mensal_id).where(
+            Contratacao.cliente_id == cliente_id)
+    if vencidas:
+        stmt = stmt.where(Cobranca.pago_em.is_(None), Cobranca.vencimento < agora_local().date())
     if pendentes is not None:
         stmt = stmt.where(Cobranca.pago_em.is_(None) if pendentes else Cobranca.pago_em.is_not(None))
     if contratacao_id is not None:
@@ -56,14 +62,14 @@ def acesso(dados: AcessoEntrada, session: SessionDep, usuario: UsuarioDep):
         raise HTTPException(404, 'Veículo não encontrado.')
     cliente = obter(session, Cliente, veiculo.cliente_id, True)
     if not cliente.ativo:
-        return AcessoSaida(liberado=False, motivo='Cliente inativo.')
+        return AcessoSaida(liberado=False, motivo='Cliente inativo.', cliente_id=cliente.id)
     hoje = agora_local().date()
     vigentes = session.exec(select(Contratacao).join(Vaga, Vaga.id == Contratacao.vaga_id).where(
         Contratacao.cliente_id == cliente.id, Vaga.ativa.is_(True),
         Contratacao.data_inicio <= hoje,
         or_(Contratacao.data_fim.is_(None), Contratacao.data_fim >= hoje))).all()
     if not vigentes:
-        return AcessoSaida(liberado=False, motivo='Sem contratação vigente em vaga ativa.')
+        return AcessoSaida(liberado=False, motivo='Sem contratação vigente em vaga ativa.', cliente_id=cliente.id)
     gerar_mensalidades(session, usuario.id, hoje, cliente.id)
     vencida = session.exec(select(Cobranca.id).join(
         Contratacao, Contratacao.id == Cobranca.contratacao_mensal_id).where(
@@ -71,6 +77,7 @@ def acesso(dados: AcessoEntrada, session: SessionDep, usuario: UsuarioDep):
         Cobranca.vencimento < hoje)).first()
     salvar(session)  # Geração persiste também quando o acesso é bloqueado por dívida.
     if vencida:
-        return AcessoSaida(liberado=False, motivo='Cliente possui mensalidade vencida e não paga.')
+        return AcessoSaida(liberado=False, motivo='Cliente possui mensalidade vencida e não paga.', cliente_id=cliente.id)
     return AcessoSaida(liberado=True, motivo='Acesso liberado. Presença controlada manualmente.',
+                       cliente_id=cliente.id,
                        vagas=[c.vaga_id for c in vigentes])

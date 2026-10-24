@@ -10,15 +10,25 @@ Não abra o HTML diretamente pelo sistema de arquivos.
 - Login e identificação do operador, com saída da conta.
 - Visão geral: indicadores reais, mapa das primeiras 24 vagas, lista de horistas,
   entrada, prévia de cobrança e confirmação da saída com pagamento.
+- Atendimento por placa na visão geral (Enter para consultar; Alt + P para focar).
+  Um veículo no pátio abre a saída; um mensalista abre o acesso e suas pendências;
+  um horista cadastrado abre a entrada com o veículo selecionado.
+- Placa nova abre cadastro de cliente e veículo junto com a entrada. É possível
+  escolher um cliente existente. Tudo é salvo em uma transação; conflitos
+  preservam os campos na tela e não deixam cadastros parciais no banco.
+- A lista de horistas mostra todos os carros presentes em uma área com rolagem
+  e filtro por placa. Após concluir uma operação, o foco volta ao atendimento.
 - Clientes: busca por nome, filtro de situação, cadastro, edição e desativação.
 - Veículos: consulta pela placa completa, filtro por cliente, cadastro e edição.
 - Vagas: cadastro, disponibilidade, edição, ativação e desativação.
 - Mensalistas: contratação, consulta de acesso pela placa e cancelamento da renovação.
 - Cobranças: atualização explícita das mensalidades antes de listar, filtros e recebimento.
+  Na consulta mensalista, cobranças vencidas podem ser recebidas sem trocar de
+  tela. Cada recebimento é integral e provoca uma nova verificação do acesso.
 - Tarifas: cadastro inicial e alteração dos valores gerais.
 - Operadores: cadastro autenticado, edição, troca de senha e desativação.
 
-As listagens usam páginas de 20 registros. Os seletores carregam as páginas
+As listagens de cadastros e cobranças usam páginas de 20 registros. Os seletores carregam as páginas
 necessárias para mostrar os cadastros disponíveis. O mapa e os indicadores
 atualizam ao abrir a visão geral ou após uma operação. Não há atualização automática
 em segundo plano. A API sempre revalida disponibilidade, permissões e valores.
