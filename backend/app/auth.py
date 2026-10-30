@@ -1,3 +1,5 @@
+"""Autenticação dos operadores: senhas, tokens JWT e usuário da requisição."""
+
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -32,18 +34,26 @@ def verificar_senha(senha, senha_hash):
 
 
 def nao_autorizado():
-    return HTTPException(401, 'Credenciais inválidas ou usuário inativo.',
-                         headers={'WWW-Authenticate': 'Bearer'})
+    return HTTPException(
+        401,
+        'Credenciais inválidas ou usuário inativo.',
+        headers={'WWW-Authenticate': 'Bearer'},
+    )
 
 
-def usuario_atual(session: SessionDep,
-                  credenciais: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]):
+def usuario_atual(
+    session: SessionDep,
+    credenciais: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+):
     if credenciais is None:
         raise nao_autorizado()
     try:
-        payload = jwt.decode(credenciais.credentials,
-                             get_settings().jwt_secret.get_secret_value(),
-                             algorithms=['HS256'], options={'require': ['exp', 'sub', 'iat']})
+        payload = jwt.decode(
+            credenciais.credentials,
+            get_settings().jwt_secret.get_secret_value(),
+            algorithms=['HS256'],
+            options={'require': ['exp', 'sub', 'iat']},
+        )
         usuario_id = int(payload['sub'])
     except (jwt.InvalidTokenError, ValueError, TypeError):
         raise nao_autorizado() from None
@@ -64,9 +74,15 @@ def login(dados: LoginEntrada, session: SessionDep):
         raise nao_autorizado()
     settings = get_settings()
     agora = datetime.now(timezone.utc)
-    token = jwt.encode({'sub': str(usuario.id), 'iat': agora,
-                        'exp': agora + timedelta(minutes=settings.jwt_expire_minutes)},
-                       settings.jwt_secret.get_secret_value(), algorithm='HS256')
+    token = jwt.encode(
+        {
+            'sub': str(usuario.id),
+            'iat': agora,
+            'exp': agora + timedelta(minutes=settings.jwt_expire_minutes),
+        },
+        settings.jwt_secret.get_secret_value(),
+        algorithm='HS256',
+    )
     return TokenSaida(access_token=token)
 
 

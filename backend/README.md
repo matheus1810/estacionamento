@@ -2,7 +2,8 @@
 
 Backend síncrono em Python **3.12.10**, FastAPI, SQLModel, MySQL e PyMySQL.
 O frontend em HTML, CSS e JavaScript é servido pelo próprio FastAPI.
-O SQL original na raiz continua sendo a referência para as oito tabelas.
+O SQL original na raiz continua sendo a referência para as oito tabelas principais.
+A migração em `migrations/` adiciona os pedidos de nota fiscal.
 
 ## Instalação no Windows com Git Bash
 
@@ -48,8 +49,23 @@ mysql -u root -p < ../mationamento.sql
 
 Se `mysql` não estiver no PATH, use o executável instalado ou abra o script no
 MySQL Workbench. Configure um usuário de aplicação com SELECT, INSERT e UPDATE
-nas oito tabelas. Não há necessidade de permissões de exclusão ou DDL para a API.
-O backend não executa `create_all`, não altera o esquema e não remove constraints.
+nas tabelas principais e na tabela de pedidos de nota. Não há necessidade de
+permissões de exclusão ou DDL para a API. O servidor não executa `create_all`,
+não altera o esquema e não remove constraints.
+
+### Preparar solicitações de nota fiscal
+
+Depois de importar o SQL inicial, execute uma vez, dentro de `backend`, com
+acesso autorizado a criar tabelas no banco configurado:
+
+```bash
+python -m scripts.preparar_notas_fiscais
+```
+
+O comando executa apenas `migrations/001_solicitacoes_nota_fiscal.sql`. Ele cria
+`solicitacoes_nota_fiscal` caso ela ainda não exista, sem alterar ou excluir os
+registros atuais. Em instalações existentes, execute somente esse comando;
+não reimporte o SQL inicial. A API precisa de SELECT e INSERT na nova tabela.
 
 Todas as datas DATETIME escritas pela aplicação usam `APP_TIMEZONE`, por padrão
 `America/Sao_Paulo`, sem informação de fuso no MySQL. O relógio do host deve estar
@@ -82,7 +98,73 @@ Copie `access_token`, clique **Authorize** e cole somente o token no campo Beare
 Execute `GET /auth/me` para conferir. Cada requisição revalida se o operador
 continua ativo. Não há cadastro público nem recuperação por e-mail.
 
+## Recuperar a senha do próprio usuário
+
+Com acesso autorizado ao terminal local e ao banco configurado no `.env`, execute
+dentro de `backend` (substitua o login, se necessário):
+
+```bash
+python -m scripts.redefinir_senha --login matheus
+```
+
+Digite e confirme uma nova senha de 8 a 128 caracteres. Os caracteres não aparecem
+no terminal. A senha recebe hash Argon2 e a atualização da própria conta preenche
+a auditoria com seu ID. O comando não cria usuários nem reativa contas inativas.
+Este procedimento é uma recuperação administrativa local, autorizada por quem
+tem acesso à configuração do banco; não há endpoint público de recuperação.
+
 ## Teste manual do rotativo
+
+### Pedido opcional de nota fiscal
+
+Na saída horista ou no recebimento de mensalidade, marque **Cliente solicitou
+nota fiscal**. Nome ou razão social e CPF/CNPJ são obrigatórios apenas quando
+marcado; e-mail e endereço são opcionais. Ao desmarcar, os campos ficam
+desabilitados e não são enviados.
+
+Os endpoints de pagamento aceitam `nota_fiscal` opcional:
+
+```json
+{
+  "forma_pagamento": "pix",
+  "nota_fiscal": {
+    "nome": "Cliente",
+    "documento": "52998224725",
+    "email": null,
+    "endereco": null
+  }
+}
+```
+
+O pedido e o pagamento são gravados na mesma transação. Uma falha no pedido
+reverte também o pagamento e a saída. A cobrança retorna
+`nota_fiscal_solicitada`; sua listagem permite filtrar por `nota_fiscal=true`.
+`GET /cobrancas/{id}/nota-fiscal` consulta os dados para emissão posterior,
+com autenticação de operador. A listagem de cobranças não expõe documento,
+e-mail ou endereço: esses dados aparecem somente na consulta do pedido.
+
+Em **Cobranças**, use **Com solicitação de NF** e **Ver pedido de NF**. O pedido
+não emite nota, não envia e-mail e não representa confirmação de emissão.
+A validação confere formato e tamanho do documento, sem consultar o cadastro
+fiscal nem confirmar sua titularidade. O CNPJ aceita letras nas primeiras
+12 posições, conforme a [documentação da Receita Federal](https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/documentos-tecnicos/cnpj/manual-dv-cnpj.pdf).
+
+### Histórico do veículo
+
+Na tela **Veículos**, consulte a placa e clique em **Histórico**. A consulta usa
+`GET /veiculos/{veiculo_id}/historico?offset=0&limite=20`, com autenticação de
+operador, limite máximo de 100 e ordenação por entrada e ID decrescentes.
+
+Cada registro inclui entrada, saída, vaga, operadores, tarifa aplicada, valor
+cobrado e pagamento. O cliente vem da permanência, preservando o vínculo da
+entrada após uma troca de responsável pelo veículo. Valores cobrados são lidos
+da cobrança gravada; permanências abertas não exibem estimativa de preço.
+
+O histórico consulta as tabelas existentes e não exige alteração do banco.
+Inclui permanências horistas já registradas. A consulta de acesso de mensalistas
+não registra passagens físicas, portanto não aparece como entrada ou saída.
+
+### Atendimento
 
 O atendimento diário agora começa pelo campo de placa na visão geral. Digite a
 placa e pressione Enter; Alt + P devolve o foco ao campo. Veículos no pátio abrem
@@ -149,6 +231,46 @@ permanências ou cobranças.
 
 ## Organização e transações
 
+### Mapa dos arquivos
+
+```text
+backend/
+├── app/
+│   ├── main.py                   Inicialização, rotas e arquivos do front-end
+│   ├── config.py                 Configuração do .env e relógio local
+│   ├── database.py               Conexão, sessão e transações
+│   ├── auth.py                   Login, senhas e validação do token
+│   ├── models.py                 Tabelas principais e pedidos de nota fiscal
+│   ├── schemas.py                Campos e validações das entradas e respostas
+│   ├── regras_estacionamento.py   Cálculos e regras compartilhadas
+│   ├── notas_fiscais.py           Pedidos de nota na transação do pagamento
+│   └── routers/                  Endpoints separados por recurso
+│       ├── clientes.py
+│       ├── veiculos.py
+│       ├── vagas.py
+│       ├── usuarios.py
+│       ├── tarifas.py
+│       ├── permanencias.py
+│       ├── contratacoes.py
+│       └── cobrancas.py
+├── scripts/                      Comandos administrativos executados no terminal
+├── migrations/                   Extensões do esquema para bancos existentes
+└── tests/                        Testes unitários, de integração e de navegador
+```
+
+Para acompanhar uma operação, comece pela rota em `app/routers/`. O parâmetro
+`dados` usa um schema de `schemas.py`, `session` permite consultar e gravar os
+modelos de `models.py`, e `usuario` vem da autenticação em `auth.py`. As regras
+compartilhadas ficam em `regras_estacionamento.py`. A rota confirma a operação
+com `salvar(session)`, definido em `database.py`.
+
+Por exemplo, uma entrada horista começa em `routers/permanencias.py`; os campos
+permitidos estão em `PermanenciaCriar`, e a disponibilidade da vaga é verificada
+pelas regras compartilhadas. Para acompanhar o mesmo atendimento no navegador,
+consulte o [mapa do front-end](../frontend/README.md#organização-do-código).
+
+### Regras de transação
+
 `config.py`: configurações e relógio local. `database.py`: engine, sessão por
 requisição, commit e rollback. `models.py`: tabelas. `schemas.py`: entradas e
 respostas explícitas. `auth.py`: Argon2, JWT e operador autenticado.
@@ -189,6 +311,7 @@ Gere uma cópia do SQL apenas para esse banco:
 ```bash
 python -c "from pathlib import Path; p=Path('../mationamento.sql').read_text(encoding='utf-8'); Path('schema_test.sql').write_text(p.replace('CREATE DATABASE IF NOT EXISTS mationamento', 'CREATE DATABASE IF NOT EXISTS mationamento_test').replace('USE mationamento;', 'USE mationamento_test;'), encoding='utf-8')"
 mysql -u root -p < schema_test.sql
+mysql -u root -p mationamento_test < migrations/001_solicitacoes_nota_fiscal.sql
 ```
 
 Configure `TEST_DATABASE_URL` somente no terminal, com driver `mysql+pymysql` e
@@ -200,7 +323,7 @@ python -m pytest -m mysql -q
 ```
 
 Sem TEST_DATABASE_URL, os testes MySQL são pulados. Eles usam o SQL original
-importado, savepoints para commits da API e rollback externo por teste, sem
+e a migração de pedidos de nota, savepoints para commits da API e rollback externo por teste, sem
 excluir tabelas nem usar SQLite. Não aponte para desenvolvimento. Os cenários
 cobrem vaga ocupada/reservada, mensalidade única, acesso, saída e pagamento
 repetidos, histórico do cliente e cancelamento preservando dívidas. Essa suíte

@@ -4,9 +4,82 @@ import pytest
 from sqlmodel import select
 
 from app.config import agora_local
-from app.models import Cliente, Cobranca, Veiculo
+from app.models import Cliente, Cobranca, Permanencia, SolicitacaoNotaFiscal, Veiculo
 
 pytestmark = pytest.mark.mysql
+
+
+def test_solicitacao_nf_horista_e_mensalista_persistem_no_pagamento(mysql_client):
+    client, session = mysql_client
+    cliente, veiculo, vaga = cadastros(client)
+    permanencia = criar(client, '/permanencias', {
+        'veiculo_id': veiculo['id'], 'vaga_id': vaga['id'],
+    })
+    fiscal = {'nome': 'Cliente Fiscal', 'documento': '529.982.247-25',
+              'email': 'cliente@example.com', 'endereco': 'Rua A, 10'}
+    pagamento = {'forma_pagamento': 'pix', 'nota_fiscal': fiscal}
+    path = f"/permanencias/{permanencia['id']}/saida"
+    resposta = client.post(path, json=pagamento)
+    assert resposta.status_code == 200, resposta.text
+    cobranca_id = resposta.json()['id']
+    assert resposta.json()['nota_fiscal_solicitada'] is True
+    assert client.post(path, json=pagamento).status_code == 409
+    pedido = client.get(f'/cobrancas/{cobranca_id}/nota-fiscal')
+    assert pedido.status_code == 200
+    assert pedido.json()['nome'] == fiscal['nome']
+    assert pedido.json()['documento'] == '52998224725'
+    assert pedido.json()['email'] == fiscal['email']
+    lista = client.get('/cobrancas?nota_fiscal=true').json()
+    assert [c['id'] for c in lista] == [cobranca_id]
+    assert lista[0]['nota_fiscal_solicitada'] is True
+    assert 'documento' not in lista[0]
+    contrato = criar(client, '/contratacoes', {
+        'cliente_id': cliente['id'], 'vaga_id': vaga['id'],
+        'data_inicio': agora_local().date().isoformat(),
+    })
+    mensalidade = client.get(f"/cobrancas?contratacao_id={contrato['id']}").json()[0]
+    pagamento['nota_fiscal']['documento'] = '00.000.000/E08G-12'
+    resposta = client.post(f"/cobrancas/{mensalidade['id']}/pagar", json=pagamento)
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()['nota_fiscal_solicitada'] is True
+    assert client.get(f"/cobrancas/{mensalidade['id']}/nota-fiscal").json()['documento'] == '00000000E08G12'
+    pedidos = session.exec(select(SolicitacaoNotaFiscal)).all()
+    assert len(pedidos) == 2
+    assert all(p.criado_por and p.criado_em for p in pedidos)
+    assert client.get('/cobrancas/999999/nota-fiscal').status_code == 404
+
+
+def test_falha_ao_salvar_nf_reverte_saida_e_pagamento(mysql_client):
+    from sqlalchemy import event
+    from sqlalchemy.exc import IntegrityError
+
+    client, session = mysql_client
+    _, veiculo, vaga = cadastros(client)
+    permanencia = criar(client, '/permanencias', {
+        'veiculo_id': veiculo['id'], 'vaga_id': vaga['id'],
+    })
+    path = f"/permanencias/{permanencia['id']}/saida"
+    pagamento = {'forma_pagamento': 'dinheiro', 'nota_fiscal': {
+        'nome': 'Cliente Fiscal', 'documento': '52998224725',
+    }}
+    invalido = {**pagamento, 'nota_fiscal': {'nome': '', 'documento': '123'}}
+    assert client.post(path, json=invalido).status_code == 422
+
+    def falhar_nf(sessao, *_):
+        if any(isinstance(obj, SolicitacaoNotaFiscal) for obj in sessao.new):
+            raise IntegrityError('Falha simulada no pedido de nota', None, Exception())
+
+    event.listen(session, 'before_flush', falhar_nf)
+    try:
+        assert client.post(path, json=pagamento).status_code == 409
+    finally:
+        event.remove(session, 'before_flush', falhar_nf)
+    aberta = session.get(Permanencia, permanencia['id'])
+    assert aberta.saida is None
+    assert aberta.usuario_saida_id is None
+    assert session.exec(select(Cobranca).where(Cobranca.permanencia_id == aberta.id)).first() is None
+    assert not session.exec(select(SolicitacaoNotaFiscal)).all()
+    assert client.post(path, json=pagamento).status_code == 200
 
 
 def criar(client, path, body):
@@ -50,6 +123,20 @@ def test_entrada_ocupada_saida_repetida_e_historico(mysql_client):
     assert client.post(f"/permanencias/{permanencia['id']}/saida",json={'forma_pagamento':'pix'}).status_code == 409
     assert client.post(f"/cobrancas/{saida.json()['id']}/pagar",json={'forma_pagamento':'pix'}).status_code == 409
     assert len(session.exec(select(Cobranca).where(Cobranca.permanencia_id==permanencia['id'])).all()) == 1
+    # A consulta mantém o cliente da entrada mesmo após trocar o responsável.
+    historico = client.get(f"/veiculos/{veiculo['id']}/historico").json()
+    assert len(historico) == 1
+    assert historico[0]['permanencia_id'] == permanencia['id']
+    assert historico[0]['cliente_id'] == cliente['id']
+    assert historico[0]['valor_cobrado'] == saida.json()['valor']
+    assert historico[0]['forma_pagamento'] == 'pix'
+    assert client.get(f"/veiculos/{outro['id']}/historico").json() == []
+    segunda = criar(client, '/permanencias', dados)
+    pagina = client.get(f"/veiculos/{veiculo['id']}/historico?limite=1").json()
+    assert pagina[0]['permanencia_id'] == segunda['id']
+    assert pagina[0]['saida'] is None
+    anterior = client.get(f"/veiculos/{veiculo['id']}/historico?offset=1&limite=1").json()
+    assert anterior[0]['permanencia_id'] == permanencia['id']
 
 
 def test_reserva_mensalidade_unica_acesso_pagamento_e_cancelamento(mysql_client):

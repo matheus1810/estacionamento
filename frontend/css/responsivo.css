@@ -1,0 +1,307 @@
+/* Ajustes por tamanho de tela e preferência de movimento. */
+
+@media (min-width: 1500px) {
+  main {
+    padding-top: 42px;
+  }
+  .metric {
+    padding: 25px;
+  }
+  .dashboard-columns {
+    grid-template-columns: 2fr 1fr;
+  }
+  .lot-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  }
+  .parking-space {
+    min-height: 115px;
+  }
+}
+@media (max-width: 1100px) {
+  .sidebar {
+    width: 205px;
+    padding-inline: 14px;
+  }
+  .sidebar .brand {
+    font-size: 17px;
+  }
+  .workspace {
+    margin-left: 205px;
+  }
+  main {
+    padding: 27px 24px;
+  }
+  .topbar {
+    padding: 0 24px;
+  }
+  .metrics {
+    gap: 12px;
+  }
+  .metric {
+    padding: 18px 15px;
+  }
+  .metric-label {
+    font-size: 10px;
+  }
+  .dashboard-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(235px, 1fr);
+    gap: 17px;
+  }
+  .panel-header {
+    padding: 20px 18px;
+  }
+  .lot-grid {
+    padding: 18px;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+  }
+  .parking-space {
+    min-height: 90px;
+  }
+  .operator-label {
+    display: none;
+  }
+  .app-footer {
+    padding-inline: 24px;
+  }
+  .login-story {
+    padding: 35px 10%;
+  }
+  .login-message h1 {
+    font-size: 48px;
+  }
+}
+@media (max-width: 850px) {
+  .sidebar {
+    width: 205px;
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+    box-shadow: 10px 0 40px #0002;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .workspace {
+    margin-left: 0;
+  }
+  .mobile-menu {
+    display: inline-grid !important;
+    margin-right: 10px;
+  }
+  .topbar {
+    justify-content: flex-start;
+    height: 65px;
+  }
+  .topbar-right {
+    margin-left: auto;
+  }
+  .dashboard-columns {
+    grid-template-columns: minmax(0, 1.7fr) minmax(235px, 1fr);
+  }
+  .page-heading h1 {
+    font-size: 28px;
+  }
+  .page-heading {
+    gap: 12px;
+  }
+  .heading-actions {
+    gap: 7px;
+  }
+  .login-layout {
+    grid-template-columns: 0.9fr 1.1fr;
+  }
+  .login-story {
+    padding: 35px 12%;
+    min-height: 100vh;
+  }
+  .login-message {
+    margin-top: 80px;
+  }
+  .login-message h1 {
+    font-size: 40px;
+  }
+  .login-message .eyebrow {
+    line-height: 1.8;
+  }
+  .login-side {
+    padding: 40px 25px;
+  }
+  .login-box h2 {
+    font-size: 25px;
+  }
+}
+@media (max-width: 640px) {
+  main {
+    padding: 24px 16px;
+  }
+  .topbar {
+    padding: 0 16px;
+  }
+  .topbar-right {
+    gap: 8px;
+  }
+  .topbar-divider {
+    display: none;
+  }
+  .breadcrumb {
+    font-size: 10px;
+    gap: 8px;
+  }
+  .clock {
+    font-size: 11px;
+  }
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 22px;
+  }
+  .page-heading .small-label {
+    font-size: 8px;
+    margin-bottom: 8px;
+  }
+  .page-heading h1 {
+    font-size: 28px;
+  }
+  .page-heading p {
+    font-size: 11px;
+  }
+  .heading-actions {
+    width: 100%;
+    margin-top: 5px;
+  }
+  .heading-actions .button {
+    flex: 1;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .metric {
+    padding: 18px;
+  }
+  .metric-value {
+    font-size: 31px;
+  }
+  .metric-label {
+    font-size: 10px;
+  }
+  .dashboard-columns {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .dashboard-main,
+  .dashboard-side {
+    width: 100%;
+  }
+  .dashboard-side {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .panel {
+    margin-bottom: 20px;
+  }
+  .panel-header {
+    padding: 19px 18px;
+  }
+  .panel-header h3 {
+    font-size: 16px;
+  }
+  .lot-grid {
+    grid-template-columns: repeat(auto-fill, minmax(73px, 1fr));
+    padding: 18px;
+    gap: 10px;
+  }
+  .parking-space {
+    min-height: 97px;
+  }
+  .toolbar {
+    padding: 15px;
+    flex-wrap: wrap;
+  }
+  .toolbar select {
+    max-width: 100%;
+    width: 100%;
+  }
+  .search-form {
+    width: 100%;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .app-footer {
+    font-size: 8px;
+    padding: 12px 16px 20px;
+  }
+  .app-footer > span:last-child {
+    display: none;
+  }
+  .login-layout {
+    display: block;
+  }
+  .login-story {
+    min-height: auto;
+    padding: 24px;
+  }
+  .login-story .brand {
+    font-size: 18px;
+  }
+  .login-message {
+    margin-top: 30px;
+    margin-bottom: 15px;
+  }
+  .login-message h1 {
+    font-size: 35px;
+    margin-top: 14px;
+  }
+  .login-message h1 br {
+    display: none;
+  }
+  .login-message p,
+  .login-footer {
+    display: none;
+  }
+  .parking-art {
+    bottom: -150px;
+    right: -190px;
+  }
+  .login-side {
+    min-height: 60vh;
+    padding: 38px 24px 70px;
+  }
+  .login-box {
+    width: 100%;
+    max-width: 370px;
+  }
+  .login-box h2 {
+    font-size: 25px;
+  }
+  .version {
+    bottom: 20px;
+  }
+  .settings-card {
+    padding: 22px;
+  }
+  dialog {
+    padding: 22px;
+  }
+  .modal-heading h2 {
+    font-size: 21px;
+  }
+  .modal-actions .button {
+    flex: 1;
+  }
+  .table-actions {
+    gap: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before,
+  *:after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

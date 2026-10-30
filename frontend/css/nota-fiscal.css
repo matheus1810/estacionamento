@@ -1,0 +1,44 @@
+/* Dados fiscais aparecem apenas quando o cliente solicita a nota. */
+.invoice-request {
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.invoice-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.invoice-toggle input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  accent-color: var(--green);
+}
+.invoice-fields {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 18px 0 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.invoice-fields legend {
+  padding: 0 5px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+.invoice-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.details dd {
+  overflow-wrap: anywhere;
+}

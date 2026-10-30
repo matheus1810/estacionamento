@@ -28,7 +28,8 @@ def mysql_client(monkeypatch):
     engine = create_engine(url, isolation_level='READ COMMITTED')
     assert set(inspect(engine).get_table_names()) >= {
         'usuarios','clientes','veiculos','vagas','tarifas','contratacoes_mensais','permanencias','cobrancas',
-    }, 'Importe o SQL original no banco de teste antes de executar.'
+        'solicitacoes_nota_fiscal',
+    }, 'Importe o SQL original e a migração de notas fiscais no banco de teste antes de executar.'
     monkeypatch.setenv('DB_NAME','nao_conectado')
     monkeypatch.setenv('DB_USER','exemplo')
     monkeypatch.setenv('DB_PASSWORD','exemplo')

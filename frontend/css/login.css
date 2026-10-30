@@ -1,0 +1,129 @@
+/* Apresentação e formulário de login. */
+
+.login-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+}
+.login-story {
+  background: var(--deep);
+  color: #fff;
+  padding: 40px 8%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 760px;
+}
+.login-story .brand {
+  align-self: flex-start;
+}
+.login-message {
+  margin-top: 90px;
+  position: relative;
+  z-index: 2;
+}
+.login-message .eyebrow {
+  color: var(--lime);
+  font-size: 8px;
+}
+.login-message h1 {
+  font-size: clamp(38px, 4.3vw, 65px);
+  line-height: 1.12;
+  letter-spacing: -2.3px;
+  margin: 24px 0;
+}
+.login-message p {
+  font-size: 13px;
+  color: #9db5a7;
+  max-width: 320px;
+}
+.login-footer {
+  font-size: 10px;
+  color: #92aa9d;
+  margin-top: auto;
+  padding-top: 95px;
+  z-index: 2;
+}
+.parking-art {
+  position: absolute;
+  width: 430px;
+  height: 370px;
+  bottom: -120px;
+  right: -130px;
+  transform: rotate(-28deg);
+  display: grid;
+  grid-template-columns: repeat(3, 90px);
+  gap: 6px;
+  opacity: 0.19;
+  border-top: 1px solid #b5d59e;
+  padding-top: 18px;
+}
+.parking-art > span {
+  position: absolute;
+  top: -80px;
+  left: 110px;
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--lime);
+}
+.parking-art i {
+  border: 2px solid #b5d59e;
+  border-top: 0;
+  width: 78px;
+  height: 140px;
+  border-radius: 0 0 8px 8px;
+}
+.login-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 50px 35px;
+  background: #fafbf7;
+  position: relative;
+}
+.login-box {
+  width: min(100%, 335px);
+}
+.login-box .small-label {
+  font-size: 8px;
+  color: #7a8b6d;
+}
+.login-box h2 {
+  font-size: 28px;
+  line-height: 1.35;
+  margin: 15px 0 10px;
+  letter-spacing: -1px;
+}
+.login-box > p {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 32px;
+}
+.login-box form {
+  display: grid;
+  gap: 22px;
+}
+.login-box input {
+  min-height: 46px;
+  background: #fff;
+}
+.login-box .button {
+  min-height: 45px;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.login-box .login-note {
+  font-size: 10px;
+  color: #97a08f;
+  text-align: center;
+  margin: 22px 0;
+}
+.version {
+  position: absolute;
+  bottom: 30px;
+  font-size: 8px;
+  color: #a8afa1;
+  letter-spacing: 1.4px;
+}

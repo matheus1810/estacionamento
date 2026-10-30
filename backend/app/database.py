@@ -1,3 +1,5 @@
+"""Conexão e sessão do banco, busca de registros e confirmação de transações."""
+
 from functools import lru_cache
 from typing import Annotated
 
@@ -12,9 +14,12 @@ from .config import get_settings
 def get_engine():
     # READ COMMITTED evita snapshots antigos depois de aguardar um bloqueio.
     # Todas as datas gravadas são fornecidas pela aplicação no fuso configurado.
-    return create_engine(get_settings().database_url, pool_pre_ping=True,
-                         isolation_level='READ COMMITTED',
-                         connect_args={'connect_timeout': 5})
+    return create_engine(
+        get_settings().database_url,
+        pool_pre_ping=True,
+        isolation_level='READ COMMITTED',
+        connect_args={'connect_timeout': 5},
+    )
 
 
 def get_session():
@@ -36,7 +41,9 @@ def salvar(session):
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(409, 'Operação em conflito com os dados cadastrados.') from None
+        raise HTTPException(
+            409, 'Operação em conflito com os dados cadastrados.'
+        ) from None
     except OperationalError as exc:
         session.rollback()
         if exc.orig.args[0] in (1205, 1213):

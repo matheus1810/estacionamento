@@ -1,16 +1,41 @@
+"""Dados aceitos e retornados pela API, com validação por recurso.
+
+Criar/Entrada definem os dados recebidos; Editar aceita atualizações parciais;
+Saida define os campos públicos retornados, sem expor os modelos do banco.
+"""
+
 import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
-Nome = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
-Login = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
-Telefone = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
-Modelo = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
-Cor = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
-Numero = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)]
+Nome = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)
+]
+Login = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+]
+Telefone = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)
+]
+Modelo = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+]
+Cor = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)
+]
+Numero = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)
+]
 Senha = Annotated[str, StringConstraints(min_length=8, max_length=128)]
 Dinheiro = Annotated[Decimal, Field(gt=0, max_digits=10, decimal_places=2)]
 Id = Annotated[int, Field(gt=0)]
@@ -197,7 +222,9 @@ class PermanenciaCadastroCriar(Entrada):
     @model_validator(mode='after')
     def responsavel_unico(self):
         if (self.cliente_id is None) == (self.cliente is None):
-            raise ValueError('Informe um cliente existente ou os dados de um novo cliente.')
+            raise ValueError(
+                'Informe um cliente existente ou os dados de um novo cliente.'
+            )
         return self
 
 
@@ -212,8 +239,62 @@ class PermanenciaSaida(AuditoriaSaida):
     usuario_saida_id: int | None
 
 
+class SolicitacaoNotaFiscalEntrada(Entrada):
+    nome: Nome
+    documento: str = Field(min_length=11, max_length=14)
+    email: str | None = Field(default=None, max_length=254)
+    endereco: str | None = Field(default=None, max_length=250)
+
+    @field_validator('documento', mode='before')
+    @classmethod
+    def documento_normalizado(cls, value):
+        if not isinstance(value, str):
+            return value
+        value = re.sub(r'[.\-/\s]', '', value).upper()
+        # CPF numérico ou CNPJ, incluindo o formato alfanumérico.
+        if not re.fullmatch(r'(?:[0-9]{11}|[A-Z0-9]{12}[0-9]{2})', value):
+            raise ValueError('Informe CPF com 11 dígitos ou CNPJ com 14 caracteres.')
+        return value
+
+    @field_validator('email', 'endereco', mode='before')
+    @classmethod
+    def opcionais_sem_espacos(cls, value):
+        return value.strip() or None if isinstance(value, str) else value
+
+    @field_validator('email')
+    @classmethod
+    def email_valido(cls, value):
+        if value and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
+            raise ValueError('Informe um e-mail válido ou deixe o campo vazio.')
+        return value
+
+
+class SolicitacaoNotaFiscalSaida(SolicitacaoNotaFiscalEntrada):
+    model_config = ConfigDict(from_attributes=True, extra='forbid')
+    id: int
+    cobranca_id: int
+    criado_em: datetime
+    criado_por: int
+
+
 class PagamentoEntrada(Entrada):
     forma_pagamento: FormaPagamento
+    nota_fiscal: SolicitacaoNotaFiscalEntrada | None = None
+
+
+class MovimentacaoVeiculoSaida(Saida):
+    permanencia_id: int
+    entrada: datetime
+    saida: datetime | None
+    cliente_id: int
+    cliente_nome: str
+    vaga_numero: str
+    operador_entrada: str
+    operador_saida: str | None
+    valor_hora_aplicado: Decimal
+    valor_cobrado: Decimal | None
+    pago_em: datetime | None
+    forma_pagamento: FormaPagamento | None
 
 
 class CobrancaSaida(AuditoriaSaida):
@@ -225,6 +306,7 @@ class CobrancaSaida(AuditoriaSaida):
     pago_em: datetime | None
     forma_pagamento: FormaPagamento | None
     usuario_recebimento_id: int | None
+    nota_fiscal_solicitada: bool = False
 
 
 class PreviaSaida(Saida):

@@ -1,8 +1,10 @@
 """Mapeamento do mationamento.sql. O DDL original é responsável pelas constraints.
 
 Não há criação automática de tabelas, relacionamentos com carregamento implícito
-ou exclusões em cascata. Campos e tipos seguem as oito tabelas existentes.
+ou exclusões em cascata. As oito tabelas principais seguem o SQL original;
+solicitações de nota fiscal são adicionadas pela migração específica.
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -55,7 +57,9 @@ class Vaga(Auditoria, table=True):
 
 class Tarifa(Auditoria, table=True):
     __tablename__ = 'tarifas'
-    id: int = Field(default=1, primary_key=True, sa_column_kwargs={'autoincrement': False})
+    id: int = Field(
+        default=1, primary_key=True, sa_column_kwargs={'autoincrement': False}
+    )
     valor_hora: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     valor_mensal_vaga: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
 
@@ -78,22 +82,48 @@ class Permanencia(Auditoria, table=True):
     vaga_id: int = Field(foreign_key='vagas.id')
     entrada: NaiveDatetime
     saida: NaiveDatetime | None = None
-    valor_hora_aplicado: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    valor_hora_aplicado: Decimal = Field(
+        sa_column=Column(Numeric(10, 2), nullable=False)
+    )
     usuario_entrada_id: int = Field(foreign_key='usuarios.id')
     usuario_saida_id: int | None = Field(default=None, foreign_key='usuarios.id')
 
 
 class Cobranca(Auditoria, table=True):
     __tablename__ = 'cobrancas'
-    __table_args__ = (UniqueConstraint('contratacao_mensal_id', 'competencia',
-                                      name='uq_cobrancas_contratacao_competencia'),)
+    __table_args__ = (
+        UniqueConstraint(
+            'contratacao_mensal_id',
+            'competencia',
+            name='uq_cobrancas_contratacao_competencia',
+        ),
+    )
     id: int | None = Field(default=None, primary_key=True)
-    permanencia_id: int | None = Field(default=None, foreign_key='permanencias.id', unique=True)
-    contratacao_mensal_id: int | None = Field(default=None, foreign_key='contratacoes_mensais.id')
+    permanencia_id: int | None = Field(
+        default=None, foreign_key='permanencias.id', unique=True
+    )
+    contratacao_mensal_id: int | None = Field(
+        default=None, foreign_key='contratacoes_mensais.id'
+    )
     competencia: date | None = None
     vencimento: date
     valor: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     pago_em: NaiveDatetime | None = None
-    forma_pagamento: str | None = Field(default=None, sa_column=Column(
-        Enum('pix', 'dinheiro', 'cartao'), nullable=True))
+    forma_pagamento: str | None = Field(
+        default=None, sa_column=Column(Enum('pix', 'dinheiro', 'cartao'), nullable=True)
+    )
     usuario_recebimento_id: int | None = Field(default=None, foreign_key='usuarios.id')
+
+
+class SolicitacaoNotaFiscal(SQLModel, table=True):
+    """Dados fornecidos no pagamento para emissão posterior, uma solicitação por cobrança."""
+
+    __tablename__ = 'solicitacoes_nota_fiscal'
+    id: int | None = Field(default=None, primary_key=True)
+    cobranca_id: int = Field(foreign_key='cobrancas.id', unique=True)
+    nome: str = Field(max_length=120)
+    documento: str = Field(max_length=14)
+    email: str | None = Field(default=None, max_length=254)
+    endereco: str | None = Field(default=None, max_length=250)
+    criado_em: NaiveDatetime
+    criado_por: int = Field(foreign_key='usuarios.id')

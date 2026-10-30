@@ -4,10 +4,23 @@ from sqlmodel import or_, select
 from ..auth import UsuarioDep
 from ..config import agora_local
 from ..database import SessionDep, obter, salvar
-from ..models import Cliente, Cobranca, Contratacao, Vaga, Veiculo
+from ..models import (
+    Cliente,
+    Cobranca,
+    Contratacao,
+    SolicitacaoNotaFiscal,
+    Vaga,
+    Veiculo,
+)
+from ..notas_fiscais import listar_cobrancas_com_solicitacao, registrar_solicitacao
 from ..regras_estacionamento import auditar, gerar_mensalidades
 from ..schemas import (
-    AcessoEntrada, AcessoSaida, CobrancaSaida, GeracaoSaida, PagamentoEntrada,
+    AcessoEntrada,
+    AcessoSaida,
+    CobrancaSaida,
+    GeracaoSaida,
+    PagamentoEntrada,
+    SolicitacaoNotaFiscalSaida,
 )
 
 router = APIRouter(prefix='/cobrancas', tags=['Cobranças'])
@@ -21,26 +34,46 @@ def atualizar(session: SessionDep, usuario: UsuarioDep):
 
 
 @router.get('', response_model=list[CobrancaSaida])
-def listar(session: SessionDep, usuario: UsuarioDep, pendentes: bool | None = None,
-           cliente_id: int | None = Query(None, gt=0), vencidas: bool = False,
-           contratacao_id: int | None = None, offset: int = Query(0, ge=0),
-           limite: int = Query(50, ge=1, le=100)):
+def listar(
+    session: SessionDep,
+    usuario: UsuarioDep,
+    pendentes: bool | None = None,
+    cliente_id: int | None = Query(None, gt=0),
+    vencidas: bool = False,
+    contratacao_id: int | None = None,
+    nota_fiscal: bool = False,
+    offset: int = Query(0, ge=0),
+    limite: int = Query(50, ge=1, le=100),
+):
     stmt = select(Cobranca)
+    if nota_fiscal:
+        stmt = stmt.join(
+            SolicitacaoNotaFiscal, SolicitacaoNotaFiscal.cobranca_id == Cobranca.id
+        )
     if cliente_id is not None:
-        stmt = stmt.join(Contratacao, Contratacao.id == Cobranca.contratacao_mensal_id).where(
-            Contratacao.cliente_id == cliente_id)
+        stmt = stmt.join(
+            Contratacao, Contratacao.id == Cobranca.contratacao_mensal_id
+        ).where(Contratacao.cliente_id == cliente_id)
     if vencidas:
-        stmt = stmt.where(Cobranca.pago_em.is_(None), Cobranca.vencimento < agora_local().date())
+        stmt = stmt.where(
+            Cobranca.pago_em.is_(None), Cobranca.vencimento < agora_local().date()
+        )
     if pendentes is not None:
-        stmt = stmt.where(Cobranca.pago_em.is_(None) if pendentes else Cobranca.pago_em.is_not(None))
+        stmt = stmt.where(
+            Cobranca.pago_em.is_(None) if pendentes else Cobranca.pago_em.is_not(None)
+        )
     if contratacao_id is not None:
         stmt = stmt.where(Cobranca.contratacao_mensal_id == contratacao_id)
-    return [CobrancaSaida.model_validate(c) for c in session.exec(
-        stmt.order_by(Cobranca.id).offset(offset).limit(limite)).all()]
+    cobrancas = session.exec(
+        stmt.order_by(Cobranca.id).offset(offset).limit(limite)
+    ).all()
+    return listar_cobrancas_com_solicitacao(session, cobrancas)
 
 
 @router.post('/{cobranca_id}/pagar', response_model=CobrancaSaida)
-def pagar(cobranca_id: int, dados: PagamentoEntrada, session: SessionDep, usuario: UsuarioDep):
+def pagar(
+    cobranca_id: int, dados: PagamentoEntrada, session: SessionDep, usuario: UsuarioDep
+):
     obj = obter(session, Cobranca, cobranca_id, True)
     if obj.contratacao_mensal_id is None:
         raise HTTPException(409, 'Horistas devem pagar no endpoint de saída.')
@@ -50,34 +83,77 @@ def pagar(cobranca_id: int, dados: PagamentoEntrada, session: SessionDep, usuari
     obj.forma_pagamento = dados.forma_pagamento
     obj.usuario_recebimento_id = usuario.id
     auditar(obj, usuario.id)
+    registrar_solicitacao(session, obj, dados.nota_fiscal, usuario.id)
     salvar(session)
-    return CobrancaSaida.model_validate(obj)
+    resposta = CobrancaSaida.model_validate(obj)
+    resposta.nota_fiscal_solicitada = dados.nota_fiscal is not None
+    return resposta
+
+
+@router.get('/{cobranca_id}/nota-fiscal', response_model=SolicitacaoNotaFiscalSaida)
+def consultar_nota_fiscal(cobranca_id: int, session: SessionDep, usuario: UsuarioDep):
+    obter(session, Cobranca, cobranca_id)
+    solicitacao = session.exec(
+        select(SolicitacaoNotaFiscal).where(
+            SolicitacaoNotaFiscal.cobranca_id == cobranca_id
+        )
+    ).first()
+    if solicitacao is None:
+        raise HTTPException(
+            404, 'Não há solicitação de nota fiscal para esta cobrança.'
+        )
+    return SolicitacaoNotaFiscalSaida.model_validate(solicitacao)
 
 
 @router.post('/consultar-acesso', response_model=AcessoSaida)
 def acesso(dados: AcessoEntrada, session: SessionDep, usuario: UsuarioDep):
-    veiculo = session.exec(select(Veiculo).where(Veiculo.placa == dados.placa)
-                          .with_for_update()).first()
+    veiculo = session.exec(
+        select(Veiculo).where(Veiculo.placa == dados.placa).with_for_update()
+    ).first()
     if veiculo is None:
         raise HTTPException(404, 'Veículo não encontrado.')
     cliente = obter(session, Cliente, veiculo.cliente_id, True)
     if not cliente.ativo:
-        return AcessoSaida(liberado=False, motivo='Cliente inativo.', cliente_id=cliente.id)
+        return AcessoSaida(
+            liberado=False, motivo='Cliente inativo.', cliente_id=cliente.id
+        )
     hoje = agora_local().date()
-    vigentes = session.exec(select(Contratacao).join(Vaga, Vaga.id == Contratacao.vaga_id).where(
-        Contratacao.cliente_id == cliente.id, Vaga.ativa.is_(True),
-        Contratacao.data_inicio <= hoje,
-        or_(Contratacao.data_fim.is_(None), Contratacao.data_fim >= hoje))).all()
+    vigentes = session.exec(
+        select(Contratacao)
+        .join(Vaga, Vaga.id == Contratacao.vaga_id)
+        .where(
+            Contratacao.cliente_id == cliente.id,
+            Vaga.ativa.is_(True),
+            Contratacao.data_inicio <= hoje,
+            or_(Contratacao.data_fim.is_(None), Contratacao.data_fim >= hoje),
+        )
+    ).all()
     if not vigentes:
-        return AcessoSaida(liberado=False, motivo='Sem contratação vigente em vaga ativa.', cliente_id=cliente.id)
+        return AcessoSaida(
+            liberado=False,
+            motivo='Sem contratação vigente em vaga ativa.',
+            cliente_id=cliente.id,
+        )
     gerar_mensalidades(session, usuario.id, hoje, cliente.id)
-    vencida = session.exec(select(Cobranca.id).join(
-        Contratacao, Contratacao.id == Cobranca.contratacao_mensal_id).where(
-        Contratacao.cliente_id == cliente.id, Cobranca.pago_em.is_(None),
-        Cobranca.vencimento < hoje)).first()
+    vencida = session.exec(
+        select(Cobranca.id)
+        .join(Contratacao, Contratacao.id == Cobranca.contratacao_mensal_id)
+        .where(
+            Contratacao.cliente_id == cliente.id,
+            Cobranca.pago_em.is_(None),
+            Cobranca.vencimento < hoje,
+        )
+    ).first()
     salvar(session)  # Geração persiste também quando o acesso é bloqueado por dívida.
     if vencida:
-        return AcessoSaida(liberado=False, motivo='Cliente possui mensalidade vencida e não paga.', cliente_id=cliente.id)
-    return AcessoSaida(liberado=True, motivo='Acesso liberado. Presença controlada manualmente.',
-                       cliente_id=cliente.id,
-                       vagas=[c.vaga_id for c in vigentes])
+        return AcessoSaida(
+            liberado=False,
+            motivo='Cliente possui mensalidade vencida e não paga.',
+            cliente_id=cliente.id,
+        )
+    return AcessoSaida(
+        liberado=True,
+        motivo='Acesso liberado. Presença controlada manualmente.',
+        cliente_id=cliente.id,
+        vagas=[c.vaga_id for c in vigentes],
+    )

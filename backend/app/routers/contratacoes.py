@@ -6,7 +6,13 @@ from ..config import agora_local
 from ..database import SessionDep, obter, salvar
 from ..models import Cliente, Cobranca, Contratacao, Vaga
 from ..regras_estacionamento import (
-    auditar, criacao, fim_cancelamento, gerar_mensalidades, ocupada, reservas, tarifa_atual,
+    auditar,
+    criacao,
+    fim_cancelamento,
+    gerar_mensalidades,
+    ocupada,
+    reservas,
+    tarifa_atual,
 )
 from ..schemas import ContratacaoCriar, ContratacaoSaida
 
@@ -23,11 +29,18 @@ def criar(dados: ContratacaoCriar, session: SessionDep, usuario: UsuarioDep):
         raise HTTPException(409, 'Cliente e vaga precisam estar ativos.')
     if reservas(session, vaga.id, dados.data_inicio, dados.data_fim):
         raise HTTPException(409, 'Já existe reserva sobreposta para esta vaga.')
-    if dados.data_inicio <= hoje and (dados.data_fim is None or dados.data_fim >= hoje) and ocupada(session, vaga.id):
+    if (
+        dados.data_inicio <= hoje
+        and (dados.data_fim is None or dados.data_fim >= hoje)
+        and ocupada(session, vaga.id)
+    ):
         raise HTTPException(409, 'Vaga ocupada por horista.')
     tarifa_atual(session)
-    obj = Contratacao(**dados.model_dump(), dia_vencimento=dados.data_inicio.day,
-                      **criacao(usuario.id))
+    obj = Contratacao(
+        **dados.model_dump(),
+        dia_vencimento=dados.data_inicio.day,
+        **criacao(usuario.id)
+    )
     session.add(obj)
     session.flush()
     gerar_mensalidades(session, usuario.id, hoje, cliente.id)
@@ -36,18 +49,29 @@ def criar(dados: ContratacaoCriar, session: SessionDep, usuario: UsuarioDep):
 
 
 @router.get('', response_model=list[ContratacaoSaida])
-def listar(session: SessionDep, usuario: UsuarioDep, cliente_id: int | None = None,
-           vigentes: bool = False,
-           offset: int = Query(0, ge=0), limite: int = Query(50, ge=1, le=100)):
+def listar(
+    session: SessionDep,
+    usuario: UsuarioDep,
+    cliente_id: int | None = None,
+    vigentes: bool = False,
+    offset: int = Query(0, ge=0),
+    limite: int = Query(50, ge=1, le=100),
+):
     stmt = select(Contratacao)
     if cliente_id is not None:
         stmt = stmt.where(Contratacao.cliente_id == cliente_id)
     if vigentes:
         hoje = agora_local().date()
-        stmt = stmt.where(Contratacao.data_inicio <= hoje,
-                          or_(Contratacao.data_fim.is_(None), Contratacao.data_fim >= hoje))
-    return [ContratacaoSaida.model_validate(c) for c in session.exec(
-        stmt.order_by(Contratacao.id).offset(offset).limit(limite)).all()]
+        stmt = stmt.where(
+            Contratacao.data_inicio <= hoje,
+            or_(Contratacao.data_fim.is_(None), Contratacao.data_fim >= hoje),
+        )
+    return [
+        ContratacaoSaida.model_validate(c)
+        for c in session.exec(
+            stmt.order_by(Contratacao.id).offset(offset).limit(limite)
+        ).all()
+    ]
 
 
 @router.get('/{contratacao_id}', response_model=ContratacaoSaida)
@@ -65,8 +89,12 @@ def cancelar(contratacao_id: int, session: SessionDep, usuario: UsuarioDep):
     obj = obter(session, Contratacao, contratacao_id, True)
     if obj.data_fim is not None and obj.data_fim < hoje:
         raise HTTPException(409, 'Contratação já encerrada.')
-    cobrancas = session.exec(select(Cobranca).where(
-        Cobranca.contratacao_mensal_id == obj.id).order_by(Cobranca.id).with_for_update()).all()
+    cobrancas = session.exec(
+        select(Cobranca)
+        .where(Cobranca.contratacao_mensal_id == obj.id)
+        .order_by(Cobranca.id)
+        .with_for_update()
+    ).all()
     obj.data_fim = fim_cancelamento(obj, cobrancas, hoje)
     auditar(obj, usuario.id)
     salvar(session)

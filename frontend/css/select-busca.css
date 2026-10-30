@@ -1,0 +1,85 @@
+/* Campo de seleção com busca e resultados na camada superior da página. */
+.select-busca {
+  min-width: 0;
+  width: 100%;
+}
+.select-busca-field {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.select-busca-field:focus-within {
+  outline: 2px solid #a3c87c;
+  outline-offset: 1px;
+}
+.select-busca-field input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-overflow: ellipsis;
+}
+.select-busca-field input:focus {
+  outline: none;
+}
+.select-busca-toggle {
+  flex: 0 0 34px;
+  border: 0;
+  border-radius: 0 8px 8px 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 16px;
+}
+.select-busca-popup {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 10px 30px #172e2c26;
+  font:
+    400 12px/1.5 'DM Sans',
+    Arial,
+    sans-serif;
+  letter-spacing: normal;
+}
+.select-busca-option {
+  padding: 10px 12px;
+  min-height: 40px;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.select-busca-option:hover,
+.select-busca-option.active {
+  background: #edf4e4;
+}
+.select-busca-option[aria-selected='true'] {
+  color: var(--green);
+  font-weight: 700;
+}
+.select-busca-status {
+  padding: 9px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.select-busca-field:has([aria-invalid='true']) {
+  border-color: var(--red);
+}
+.toolbar > .select-busca {
+  width: min(100%, 280px);
+}
+@media (max-width: 640px) {
+  .toolbar > .select-busca {
+    width: 100%;
+  }
+}
