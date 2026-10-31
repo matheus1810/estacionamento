@@ -85,6 +85,11 @@ usuário e serializa execuções concorrentes com um lock nomeado MySQL. Somente
 esse primeiro registro aceita `criado_por` vazio. Depois use a tela Operadores
 ou `POST /usuarios` autenticado. Senhas são protegidas com Argon2.
 
+Se algum dado for inválido, o comando indica o campo (Nome, Login ou Senha) e
+a correção necessária, sem mostrar a senha digitada. A senha deve ter de 8 a
+128 caracteres e não pode conter apenas espaços. Erros do `.env` são apresentados
+separadamente, com o nome da configuração e sem exibir seus valores.
+
 Abra **http://127.0.0.1:8000** para usar as telas ou **http://127.0.0.1:8000/docs**
 para explorar a API. A interface não precisa de npm ou de um servidor separado.
 

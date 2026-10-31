@@ -9,9 +9,38 @@ from sqlmodel import Session, select
 
 from app.auth import hash_senha
 from app.database import get_engine
+from app.erros_validacao import mensagens_por_campo
 from app.models import Usuario
 from app.regras_estacionamento import criacao
 from app.schemas import UsuarioCriar
+
+
+def mostrar_erros_validacao(error):
+    if error.title == 'Settings':
+        print('Configuração inválida no backend/.env ou nas variáveis do terminal:')
+        campos = {
+            'db_host': 'DB_HOST', 'db_port': 'DB_PORT', 'db_name': 'DB_NAME',
+            'db_user': 'DB_USER', 'db_password': 'DB_PASSWORD',
+            'jwt_secret': 'JWT_SECRET', 'jwt_expire_minutes': 'JWT_EXPIRE_MINUTES',
+            'app_timezone': 'APP_TIMEZONE',
+        }
+        for item in error.errors():
+            campo = campos.get(str(item['loc'][0]), 'Configuração')
+            if item['type'] == 'missing':
+                mensagem = 'campo obrigatório; preencha no arquivo .env.'
+            elif campo == 'JWT_SECRET':
+                mensagem = 'use uma chave aleatória com pelo menos 32 caracteres.'
+            elif campo == 'DB_PORT':
+                mensagem = 'informe uma porta numérica entre 1 e 65535.'
+            elif campo == 'JWT_EXPIRE_MINUTES':
+                mensagem = 'informe um número inteiro maior que zero.'
+            else:
+                mensagem = 'confira o formato da configuração.'
+            print(f'- {campo}: {mensagem}')
+        return
+    print('Dados do operador inválidos:')
+    for item in mensagens_por_campo(error.errors()):
+        print('- ' + item['mensagem'])
 
 
 def main():
@@ -54,8 +83,8 @@ def main():
                 session.exec(
                     text("SELECT RELEASE_LOCK('mationamento_primeiro_usuario')")
                 )
-    except ValidationError:
-        print('Configuração ou dados inválidos. Confira o .env e os campos informados.')
+    except ValidationError as error:
+        mostrar_erros_validacao(error)
         return 1
     except SQLAlchemyError:
         print('Não foi possível cadastrar. Confira a conexão e a importação do SQL.')

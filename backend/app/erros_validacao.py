@@ -67,6 +67,8 @@ def mensagens_por_campo(errors):
             message = 'informe CPF com 11 dígitos ou CNPJ com 14 caracteres.'
         elif kind == 'value_error' and name == 'email':
             message = 'informe um e-mail válido ou deixe o campo vazio.'
+        elif kind == 'value_error' and name == 'senha':
+            message = 'use de 8 a 128 caracteres; a senha não pode conter apenas espaços.'
         elif kind == 'greater_than' and name.endswith('_id'):
             message = 'selecione uma opção válida.'
         else:
