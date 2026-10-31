@@ -12,6 +12,7 @@ import { $, esc } from '../utils/dom.js';
 import { money, localTime, timestamp, duration } from '../utils/formatacao.js';
 import { refreshSearchableSelect } from '../ui/select-busca.js';
 import { invoiceRequestFields, paymentPayload } from '../ui/nota-fiscal.js';
+import { normalizePhone } from '../utils/validacao-campos.js';
 
 async function entryModal(vagaId, veiculoId) {
   const [vagas, veiculos, clientes] = await Promise.all([
@@ -271,7 +272,8 @@ async function quickRegistrationModal(placa, vagaId) {
           ${input('nome', 'Nome do cliente', 'text', '', {
             required: true,
             maxlength: 120,
-          })}${input('telefone', 'Telefone', 'tel', '', { required: true, maxlength: 20 })}
+            'data-validation': 'nome-cliente',
+          })}${input('telefone', 'Telefone', 'tel', '', { required: true, maxlength: 25 })}
         </div>
       </div>
       <p class="muted" style="font-size:10px;margin-top:18px">
@@ -285,7 +287,7 @@ async function quickRegistrationModal(placa, vagaId) {
         cor: values.cor,
         vaga_id: Number(values.vaga_id),
         ...(values.responsavel === 'novo'
-          ? { cliente: { nome: values.nome.trim(), telefone: values.telefone.trim() } }
+          ? { cliente: { nome: values.nome.trim(), telefone: normalizePhone(values.telefone) } }
           : { cliente_id: Number(values.responsavel) }),
       };
       const p = await post('/permanencias/cadastro-entrada', body);

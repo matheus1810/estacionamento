@@ -175,7 +175,8 @@ function bindPageEvents() {
     }
   });
   document.addEventListener('input', (event) => {
-    if (event.target.name === 'placa') event.target.removeAttribute('aria-invalid');
+    if (event.target.name === 'placa' && !event.target.dataset.fieldErrorId)
+      event.target.removeAttribute('aria-invalid');
     if (event.target.id !== 'stay-filter') return;
     const query = event.target.value.replace(/[\s-]/g, '').toUpperCase();
     let visible = 0;

@@ -457,7 +457,7 @@ def test_placa_orienta_correcao_sem_alterar_valor_digitado(browser_page):
     assert placa.evaluate('(el) => document.activeElement === el')
     assert not any(path.startswith('/veiculos/placa/') for _, path, _ in calls)
     placa.fill('ABC12DD')
-    assert placa.get_attribute('aria-invalid') is None
+    assert placa.get_attribute('aria-invalid') == 'true'
     dialog.get_by_role('button', name='Consultar placa', exact=True).click()
     dialog.get_by_text(
         'O formato da placa não foi reconhecido. Use ABC1234 (3 letras e 4 números) '
@@ -686,3 +686,127 @@ def test_nf_mensalidade_pode_ser_consultada_em_cobrancas(browser_page):
     assert dialog.get_by_text('00000000E08G12', exact=True).is_visible()
     assert dialog.get_by_text('Não informado', exact=True).count() == 2
     assert any('nota_fiscal=true' in url for url in consultas)
+
+
+def test_cliente_valida_nome_telefone_e_mostra_erros_nos_campos(browser_page):
+    page, calls, _ = browser_page
+    entrar(page)
+    page.locator('a[data-page="clientes"]').click()
+    page.get_by_role('button', name='Novo cliente', exact=True).click()
+    dialog = page.get_by_role('dialog')
+    nome = dialog.get_by_label('Nome completo', exact=True)
+    telefone = dialog.get_by_label('Telefone', exact=True)
+    nome.fill('5L1212')
+    telefone.fill('qualquer coisa')
+    dialog.get_by_role('button', name='Salvar', exact=True).click()
+    assert dialog.locator('.field-error').count() == 2
+    dialog.get_by_text(
+        'Nome: use apenas letras, espaços, apóstrofos e hífens. Números não são permitidos.',
+        exact=True,
+    ).wait_for()
+    assert nome.get_attribute('aria-invalid') == 'true'
+    assert telefone.get_attribute('aria-invalid') == 'true'
+    assert nome.evaluate('(el) => document.activeElement === el')
+    assert 'DDD' in page.locator('#' + telefone.get_attribute('data-field-error-id')).inner_text()
+    assert not any(method == 'POST' and path == '/clientes' for method, path, _ in calls)
+    page.set_viewport_size({'width': 390, 'height': 844})
+    assert dialog.evaluate('(el) => el.scrollWidth <= el.clientWidth')
+    ARTIFACTS.mkdir(exist_ok=True)
+    page.screenshot(path=str(ARTIFACTS / 'validacao-cliente-mobile.png'), full_page=True)
+    nome.fill('Maria D’Ávila')
+    telefone.fill('+55 (11) 91234-5678')
+    assert dialog.locator('.field-error').count() == 0
+    dialog.get_by_role('button', name='Salvar', exact=True).click()
+    page.get_by_text('Cliente cadastrado. Cadastre o veículo na tela Veículos.', exact=True).wait_for()
+    assert ('POST', '/clientes', {'nome': 'Maria D’Ávila', 'telefone': '11912345678'}) in calls
+
+
+def test_veiculo_valida_campos_e_exibe_erro_retornado_pela_api(browser_page):
+    page, _, _ = browser_page
+    tentativas = []
+
+    def salvar(route):
+        tentativas.append(route.request.post_data_json)
+        if len(tentativas) == 1:
+            route.fulfill(status=422, json={
+                'detail': 'Confira os campos indicados e tente novamente.',
+                'erros': [{'campo': 'cor', 'mensagem': 'Cor: confira a cor informada.'}],
+            })
+        else:
+            route.fulfill(status=201, json={'id': 3, **tentativas[-1]})
+
+    entrar(page)
+    page.locator('a[data-page="veiculos"]').click()
+    page.get_by_role('button', name='Novo veículo', exact=True).click()
+    page.route('**/veiculos', salvar)
+    dialog = page.get_by_role('dialog')
+    cliente = dialog.get_by_role('combobox', name='Cliente responsável', exact=True)
+    cliente.fill('ana')
+    cliente.press('Enter')
+    placa = dialog.get_by_label('Placa', exact=True)
+    modelo = dialog.get_by_label('Modelo', exact=True)
+    cor = dialog.get_by_label('Cor', exact=True)
+    placa.fill('1234567')
+    modelo.fill('!!!')
+    cor.fill('123')
+    dialog.get_by_role('button', name='Salvar', exact=True).click()
+    assert dialog.locator('.field-error').count() == 3
+    assert tentativas == []
+    assert placa.evaluate('(el) => document.activeElement === el')
+    placa.fill('abc-1d23')
+    modelo.fill('208')
+    cor.fill('Prata/Preto')
+    dialog.get_by_role('button', name='Salvar', exact=True).click()
+    dialog.get_by_text('Cor: confira a cor informada.', exact=True).wait_for()
+    assert cor.evaluate('(el) => document.activeElement === el')
+    assert cor.get_attribute('aria-invalid') == 'true'
+    assert modelo.input_value() == '208'
+    assert cliente.input_value() == 'Ana Cliente'
+    cor.fill('Azul')
+    dialog.get_by_role('button', name='Salvar', exact=True).click()
+    page.get_by_text('Veículo cadastrado.', exact=True).wait_for()
+    assert len(tentativas) == 2
+
+
+def test_cadastro_rapido_valida_telefone_e_mapeia_erro_aninhado(browser_page):
+    page, _, _ = browser_page
+    page.route('**/veiculos/placa/NEW1A23', lambda route: route.fulfill(
+        status=404, json={'detail': 'Veículo não encontrado.'},
+    ))
+    tentativas = []
+
+    def cadastrar(route):
+        tentativas.append(route.request.post_data_json)
+        if len(tentativas) == 1:
+            route.fulfill(status=422, json={
+                'detail': 'Confira os campos indicados e tente novamente.',
+                'erros': [{'campo': 'cliente.telefone', 'mensagem': 'Telefone: confira o DDD informado.'}],
+            })
+        else:
+            route.fulfill(status=201, json={'id': 3, 'vaga_id': 1})
+
+    page.route('**/permanencias/cadastro-entrada', cadastrar)
+    entrar(page)
+    page.get_by_label('Placa para atendimento', exact=True).fill('NEW1A23')
+    page.get_by_label('Placa para atendimento', exact=True).press('Enter')
+    dialog = page.get_by_role('dialog')
+    dialog.get_by_label('Modelo', exact=True).fill('Argo')
+    dialog.get_by_label('Cor', exact=True).fill('Branco')
+    dialog.get_by_label('Nome do cliente', exact=True).fill('Cliente5')
+    telefone = dialog.get_by_label('Telefone', exact=True)
+    telefone.fill('123')
+    dialog.get_by_role('button', name='Cadastrar e confirmar entrada', exact=True).click()
+    assert tentativas == []
+    assert telefone.get_attribute('aria-invalid') == 'true'
+    assert dialog.get_by_label('Nome do cliente', exact=True).get_attribute('aria-invalid') == 'true'
+    dialog.get_by_label('Nome do cliente', exact=True).fill('Cliente Novo')
+    telefone.fill('(11) 3234-5678')
+    dialog.get_by_role('button', name='Cadastrar e confirmar entrada', exact=True).click()
+    dialog.get_by_text('Telefone: confira o DDD informado.', exact=True).wait_for()
+    assert telefone.evaluate('(el) => document.activeElement === el')
+    assert dialog.get_by_label('Nome do cliente', exact=True).input_value() == 'Cliente Novo'
+    telefone.fill('11912345678')
+    dialog.get_by_role('button', name='Cadastrar e confirmar entrada', exact=True).click()
+    page.get_by_text('Entrada registrada: NEW1A23 · vaga A-01. Cadastro concluído.', exact=True).wait_for()
+    assert tentativas[0]['cliente']['telefone'] == '1132345678'
+    assert tentativas[1]['cliente']['telefone'] == '11912345678'

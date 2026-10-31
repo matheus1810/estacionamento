@@ -97,7 +97,9 @@ def cadastros(client):
         criar(client,'/tarifas',{'valor_hora':'10.00','valor_mensal_vaga':'300.00'})
     else:
         assert client.put('/tarifas',json={'valor_hora':'10.00','valor_mensal_vaga':'300.00'}).status_code == 200
-    cliente = criar(client,'/clientes',{'nome':'Cliente '+suffix,'telefone':'11999999999'})
+    nome_suffix = suffix.translate(str.maketrans('0123456789', 'ghijklmnop'))
+    cliente = criar(client,'/clientes',{'nome':'Cliente '+nome_suffix,'telefone':'(11) 99999-9999'})
+    assert cliente['telefone'] == '11999999999'
     veiculo = criar(client,'/veiculos',{'cliente_id':cliente['id'],'placa':'TST1A23','modelo':'Uno','cor':'azul'})
     vaga = criar(client,'/vagas',{'numero':suffix})
     return cliente,veiculo,vaga

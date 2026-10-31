@@ -32,6 +32,7 @@ function bindGlobalEvents() {
 
 function enhance(select) {
   const label = select.getAttribute('aria-label') || select.name;
+  select.dataset.fieldLabel = label;
   const id = `select-busca-${++sequence}`;
   const wrapper = document.createElement('div');
   wrapper.className = 'select-busca';

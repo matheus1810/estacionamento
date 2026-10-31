@@ -231,6 +231,28 @@ permanências ou cobranças.
 
 ## Organização e transações
 
+### Validação dos cadastros
+
+`validacao_campos.py` centraliza as regras aplicadas pelos schemas de criação,
+edição e cadastro rápido. Telefone deve ter DDD e número de fixo (10 dígitos ao
+todo) ou celular (11 dígitos ao todo). Pontuação e o prefixo `+55` são aceitos;
+o armazenamento usa apenas DDD e número. A regra de formato segue o
+[plano de numeração da Anatel](https://www.gov.br/anatel/pt-br/regulado/numeracao/plano-de-numeracao-brasileiro)
+e não confirma se o número está ativo.
+
+Nomes de clientes aceitam apenas letras, espaços, apóstrofos e hífens, incluindo
+acentos. Números são rejeitados também na edição e no cadastro rápido. A razão
+social da solicitação de nota fiscal mantém sua regra própria. Modelo deve conter letras ou números (por exemplo,
+`F-150` ou `208`); cor deve ser escrita por extenso, sem números. As duas formas
+brasileiras de placa continuam aceitas. Limites de tamanho e campos obrigatórios
+também são conferidos pelo servidor, independentemente da interface.
+
+Respostas 422 mantêm `detail` e `campos` e incluem `erros`, com pares `campo` e
+`mensagem` em português. Caminhos aninhados como `cliente.telefone` permitem
+destacar o campo do cadastro rápido. As mensagens não reproduzem valores de
+entrada, senhas, exceções internas ou detalhes SQL. `erros_validacao.py` faz a
+conversão das falhas para essas mensagens.
+
 ### Mapa dos arquivos
 
 ```text
@@ -242,6 +264,8 @@ backend/
 │   ├── auth.py                   Login, senhas e validação do token
 │   ├── models.py                 Tabelas principais e pedidos de nota fiscal
 │   ├── schemas.py                Campos e validações das entradas e respostas
+│   ├── validacao_campos.py        Regras dos campos de cadastro
+│   ├── erros_validacao.py         Respostas de validação sem expor valores
 │   ├── regras_estacionamento.py   Cálculos e regras compartilhadas
 │   ├── notas_fiscais.py           Pedidos de nota na transação do pagamento
 │   └── routers/                  Endpoints separados por recurso

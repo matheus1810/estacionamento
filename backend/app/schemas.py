@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -17,21 +18,37 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from .validacao_campos import (
+    normalizar_telefone,
+    validar_cor,
+    validar_modelo,
+    validar_nome,
+    validar_nome_cliente,
+)
 
 Nome = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
+    AfterValidator(validar_nome),
 ]
+NomeCliente = Annotated[Nome, AfterValidator(validar_nome_cliente)]
 Login = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
 ]
 Telefone = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=25),
+    AfterValidator(normalizar_telefone),
 ]
 Modelo = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=80),
+    AfterValidator(validar_modelo),
 ]
 Cor = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=30),
+    AfterValidator(validar_cor),
 ]
 Numero = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10)
@@ -116,12 +133,12 @@ class UsuarioSaida(AuditoriaSaida):
 
 
 class ClienteCriar(Entrada):
-    nome: Nome
+    nome: NomeCliente
     telefone: Telefone
 
 
 class ClienteEditar(Edicao):
-    nome: Nome | None = None
+    nome: NomeCliente | None = None
     telefone: Telefone | None = None
     ativo: bool | None = None
 

@@ -25,7 +25,8 @@ frontend/
 │   ├── atendimento.css        Atendimento por placa e lista de horistas
 │   ├── select-busca.css       Campo de seleção com busca integrada
 │   ├── historico-veiculo.css  Cartões do histórico de permanências
-│   └── nota-fiscal.css        Campos opcionais do pedido de nota
+│   ├── nota-fiscal.css        Campos opcionais do pedido de nota
+│   └── validacao.css          Destaques e mensagens de erro por campo
 └── js/
     ├── api.js                 Requisições HTTP e tratamento de erros
     ├── autenticacao.js        Login, logout e restauração da sessão
@@ -58,11 +59,13 @@ frontend/
     │   ├── modal.js           Abertura, fechamento e envio da janela
     │   ├── select-busca.js    Busca, teclado e seleção de registros
     │   ├── nota-fiscal.js     Campos condicionais e dados do pagamento
+    │   ├── validacao-formulario.js  Mensagens locais e erros retornados pela API
     │   ├── notificacoes.js    Mensagens temporárias
     │   └── icones.js          Ícones SVG
     └── utils/
         ├── dom.js            Seleção de elementos e escape de texto HTML
-        └── formatacao.js     Apresentação de dinheiro, datas e duração
+        ├── formatacao.js     Apresentação de dinheiro, datas e duração
+        └── validacao-campos.js  Regras de nome, telefone, placa, modelo e cor
 ```
 
 ### Por onde começar a leitura
@@ -110,6 +113,13 @@ para atualizar o campo, como faz o fluxo de atualização de vagas.
 ## Telas
 
 - Login e identificação do operador, com saída da conta.
+- Clientes, veículos e cadastro rápido validam os campos antes do envio. O
+  telefone aceita fixo ou celular com DDD, com pontuação e prefixo `+55`
+  opcionais; é salvo como DDD e número, apenas dígitos. Nomes de clientes aceitam
+  apenas letras, espaços, apóstrofos e hífens, com acentos e sem números;
+  modelos aceitam letras e números, como `F-150` e `208`; cores são informadas
+  por extenso. Erros aparecem junto ao campo, sem apagar os dados, e o foco vai
+  para o primeiro campo inválido. Mensagens da API seguem o mesmo comportamento.
 - Pagamentos de horistas e mensalistas permitem marcar **Cliente solicitou nota
   fiscal**. Os campos aparecem apenas quando marcado. Nome ou razão social e
   CPF/CNPJ são obrigatórios; e-mail e endereço são opcionais. O pedido é salvo

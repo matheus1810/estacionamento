@@ -21,6 +21,13 @@ async function api(path, options = {}) {
       typeof data.detail === 'string' ? data.detail : 'Confira os dados informados.',
     );
     error.status = response.status;
+    error.fieldErrors = Array.isArray(data.erros)
+      ? data.erros.filter(
+          (item) => item && typeof item.campo === 'string' && typeof item.mensagem === 'string',
+        )
+      : [];
+    if (error.fieldErrors.length)
+      error.message = error.fieldErrors.map((item) => item.mensagem).join('\n');
     throw error;
   }
   return data;

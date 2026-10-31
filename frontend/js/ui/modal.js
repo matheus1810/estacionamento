@@ -5,6 +5,7 @@ import { toast } from './notificacoes.js';
 import { $ } from '../utils/dom.js';
 import { initSearchableSelects, closeSearchableSelects } from './select-busca.js';
 import { initInvoiceRequest } from './nota-fiscal.js';
+import { bindFormValidation, validateForm, applyServerErrors } from './validacao-formulario.js';
 
 let modalHandler = null;
 let modalVersion = 0;
@@ -16,6 +17,7 @@ function openModal(title, body, handler, button = 'Salvar') {
   initSearchableSelects($('#modal-body'));
   initInvoiceRequest($('#modal-body'));
   $('#modal-error').hidden = true;
+  delete $('#modal-error').dataset.validation;
   $('#modal-submit').textContent = button;
   $('#modal-submit').disabled = !handler;
   $('#modal-submit').hidden = !handler;
@@ -36,21 +38,27 @@ function closeModal() {
 }
 
 function bindModalEvents() {
+  bindFormValidation($('#modal-form'));
   $('#modal-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!modalHandler) return;
+    const form = event.currentTarget;
+    if (!validateForm(form)) return;
     const handler = modalHandler;
     const version = modalVersion;
     $('#modal-submit').disabled = true;
     $('#modal-error').hidden = true;
+    delete $('#modal-error').dataset.validation;
     $('#modal-close').disabled = true;
     $('#modal-cancel').disabled = true;
     try {
       await handler(Object.fromEntries(new FormData(event.target)));
     } catch (error) {
       if (version === modalVersion) {
-        $('#modal-error').textContent = error.message;
-        $('#modal-error').hidden = false;
+        if (!applyServerErrors(form, error.fieldErrors)) {
+          $('#modal-error').textContent = error.message;
+          $('#modal-error').hidden = false;
+        }
       } else toast(error.message, true);
     } finally {
       $('#modal-close').disabled = false;

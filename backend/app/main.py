@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from .auth import router as auth_router
 from .config import get_settings
+from .erros_validacao import mensagens_por_campo
 from .routers import (
     clientes,
     cobrancas,
@@ -63,8 +64,9 @@ def entrada_invalida(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
         content={
-            'detail': 'Dados inválidos. Confira os campos e formatos documentados.',
+            'detail': 'Confira os campos indicados e tente novamente.',
             'campos': ['.'.join(str(p) for p in e['loc']) for e in exc.errors()],
+            'erros': mensagens_por_campo(exc.errors()),
         },
     )
 
